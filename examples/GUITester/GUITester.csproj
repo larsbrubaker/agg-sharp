@@ -129,6 +129,10 @@
       <Project>{74F6BB6C-9D02-4512-A59A-21940E35C532}</Project>
       <Name>Gui</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\NRasterizer\NRasterizer.csproj">
+      <Project>{4a7b6d01-73b6-4313-b78f-c4418c9b895a}</Project>
+      <Name>NRasterizer</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\PlatformWin32\PlatformWin32.csproj">
       <Project>{670BDDFF-927B-425D-9DD1-22ACB14356EB}</Project>
       <Name>PlatformWin32</Name>
@@ -144,6 +148,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Pages\ButtonAnchorTest.cs" />
+    <Compile Include="Pages\NRasterizer.cs" />
     <Compile Include="Pages\WebCamPage.cs" />
     <Compile Include="Pages\GridControl.cs" />
     <Compile Include="Pages\FontHintPage.cs" />

@@ -30,9 +30,10 @@ namespace MatterHackers.Agg
 		{
 			mainNavigationTabControl = new TabControl(Orientation.Vertical);
 
-			
-			mainNavigationTabControl.AddTab(new GridControlPage(), "GridControl");
+
+			mainNavigationTabControl.AddTab(new TabPage(new NRasterizerWidget(), "NRasterizer"), "NRasterizer");
 #if true
+			mainNavigationTabControl.AddTab(new GridControlPage(), "GridControl");
 			mainNavigationTabControl.AddTab(new MenuPage(), "MenuPage");
 			mainNavigationTabControl.AddTab(new TextEditPage(), "TextEditPage");
 			mainNavigationTabControl.AddTab(new SplitterPage(), "SplitterPage");
@@ -51,7 +52,7 @@ namespace MatterHackers.Agg
 			mainNavigationTabControl.AddTab(new SliderControlsPage(), "SliderControlsPage");
 			mainNavigationTabControl.AddTab(new TabPage(new FontInfoWidget(), "Fonts"), "Fonts");
 			mainNavigationTabControl.AddTab(new TabPage(new FontHintWidget(), "Font Hinting"), "Font Hinting");
-			mainNavigationTabControl.AddTab(new TabPage(new WebCamWidget(), "Web Cam"), "WebCam");
+			//mainNavigationTabControl.AddTab(new TabPage(new WebCamWidget(), "Web Cam"), "WebCam");
 #endif
 			this.AddChild(mainNavigationTabControl);
 

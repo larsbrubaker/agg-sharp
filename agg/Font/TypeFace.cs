@@ -28,7 +28,7 @@ namespace MatterHackers.Agg.Font
 {
 	public class TypeFace
 	{
-		private class Glyph
+		public class Glyph
 		{
 			public int horiz_adv_x;
 			public int unicode;
@@ -36,7 +36,7 @@ namespace MatterHackers.Agg.Font
 			public PathStorage glyphData = new PathStorage();
 		}
 
-		private class Panos_1
+		public class Panos_1
 		{
 			// these are defined in the order in which they are present in the panos-1 attribute.
 			private enum Family { Any, No_Fit, Latin_Text_and_Display, Latin_Script, Latin_Decorative, Latin_Pictorial };
@@ -97,99 +97,47 @@ namespace MatterHackers.Agg.Font
 			}
 		}
 
-		private String fontId;
-		private int horiz_adv_x;
-		private String fontFamily;
-		private int font_weight;
-		private String font_stretch;
-		private int unitsPerEm;
-		private Panos_1 panose_1;
-		private int ascent;
+		internal String fontId;
+		internal int horiz_adv_x;
+		internal String fontFamily;
+		internal int font_weight;
+		internal String font_stretch;
+		public int UnitsPerEm { get; set; }
+		internal Panos_1 panose_1;
+		internal int ascent;
 
 		public int Ascent { get { return ascent; } }
 
-		private int descent;
+		internal int descent;
 
 		public int Descent { get { return descent; } }
 
-		private int x_height;
+		internal int x_height;
 
 		public int X_height { get { return x_height; } }
 
-		private int cap_height;
+		internal int cap_height;
 
 		public int Cap_height { get { return cap_height; } }
 
-		private RectangleInt boundingBox;
+		internal RectangleInt boundingBox;
 
 		public RectangleInt BoundingBox { get { return boundingBox; } }
 
-		private int underline_thickness;
+		internal int underline_thickness;
 
 		public int Underline_thickness { get { return underline_thickness; } }
 
-		private int underline_position;
+		internal int underline_position;
 
 		public int Underline_position { get { return underline_position; } }
 
-		private String unicode_range;
+		internal String unicode_range;
 
-		private Glyph missingGlyph;
+		internal Glyph missingGlyph;
 
-		private Dictionary<int, Glyph> glyphs = new Dictionary<int, Glyph>(); // a glyph is indexed by the string it represents, usually one character, but sometimes multiple
+		internal Dictionary<int, Glyph> glyphs = new Dictionary<int, Glyph>(); // a glyph is indexed by the string it represents, usually one character, but sometimes multiple
 		private Dictionary<Char, Dictionary<Char, int>> HKerns = new Dictionary<char, Dictionary<char, int>>();
-
-		public int UnitsPerEm
-		{
-			get
-			{
-				return unitsPerEm;
-			}
-		}
-
-		private static String GetSubString(String source, String start, String end)
-		{
-			int startIndex = 0;
-			return GetSubString(source, start, end, ref startIndex);
-		}
-
-		private static String GetSubString(String source, String start, String end, ref int startIndex)
-		{
-			int startPos = source.IndexOf(start, startIndex);
-			if (startPos >= 0)
-			{
-				int endPos = source.IndexOf(end, startPos + start.Length);
-
-				int length = endPos - (startPos + start.Length);
-				startIndex = endPos + end.Length; // advance our start position to the last position used
-				return source.Substring(startPos + start.Length, length);
-			}
-
-			return null;
-		}
-
-		private static String GetStringValue(String source, String name)
-		{
-			String element = GetSubString(source, name + "=\"", "\"");
-			return element;
-		}
-
-		private static bool GetIntValue(String source, String name, out int outValue, ref int startIndex)
-		{
-			String element = GetSubString(source, name + "=\"", "\"", ref startIndex);
-			if (int.TryParse(element, NumberStyles.Number, null, out outValue))
-			{
-				return true;
-			}
-
-			return false;
-		}
-
-		private static bool GetIntValue(String source, String name, out int outValue)
-		{
-			int startIndex = 0;
-			return GetIntValue(source, name, out outValue, ref startIndex);
-		}
 
 		public static TypeFace LoadFrom(string content)
 		{
@@ -214,97 +162,6 @@ namespace MatterHackers.Agg.Font
 			fontUnderConstruction.ReadSVG(svgContent);
 
 			return fontUnderConstruction;
-		}
-
-		private Glyph CreateGlyphFromSVGGlyphData(String SVGGlyphData)
-		{
-			Glyph newGlyph = new Glyph();
-			if (!GetIntValue(SVGGlyphData, "horiz-adv-x", out newGlyph.horiz_adv_x))
-			{
-				newGlyph.horiz_adv_x = horiz_adv_x;
-			}
-
-			newGlyph.glyphName = GetStringValue(SVGGlyphData, "glyph-name");
-			String unicodeString = GetStringValue(SVGGlyphData, "unicode");
-
-			if (unicodeString != null)
-			{
-				if (unicodeString.Length == 1)
-				{
-					newGlyph.unicode = (int)unicodeString[0];
-				}
-				else
-				{
-					if (unicodeString.Split(';').Length > 1 && unicodeString.Split(';')[1].Length > 0)
-					{
-						throw new NotImplementedException("We do not currently support glyphs longer than one character.  You need to write the search so that it will find them if you want to support this");
-					}
-
-					if (int.TryParse(unicodeString, NumberStyles.Number, null, out newGlyph.unicode) == false)
-					{
-						// see if it is a unicode
-						String hexNumber = GetSubString(unicodeString, "&#x", ";");
-						int.TryParse(hexNumber, NumberStyles.HexNumber, null, out newGlyph.unicode);
-					}
-				}
-			}
-
-			String dString = GetStringValue(SVGGlyphData, "d");
-
-			if (dString == null || dString.Length == 0)
-			{
-				return newGlyph;
-			}
-
-			newGlyph.glyphData.ParseSvgDString(dString);
-
-			return newGlyph;
-		}
-
-		public void ReadSVG(String svgContent)
-		{
-			int startIndex = 0;
-			String fontElementString = GetSubString(svgContent, "<font", ">", ref startIndex);
-			fontId = GetStringValue(fontElementString, "id");
-			GetIntValue(fontElementString, "horiz-adv-x", out horiz_adv_x);
-
-			String fontFaceString = GetSubString(svgContent, "<font-face", "/>", ref startIndex);
-			fontFamily = GetStringValue(fontFaceString, "font-family");
-			GetIntValue(fontFaceString, "font-weight", out font_weight);
-			font_stretch = GetStringValue(fontFaceString, "font-stretch");
-			GetIntValue(fontFaceString, "units-per-em", out unitsPerEm);
-			panose_1 = new Panos_1(GetStringValue(fontFaceString, "panose-1"));
-			GetIntValue(fontFaceString, "ascent", out ascent);
-			GetIntValue(fontFaceString, "descent", out descent);
-			GetIntValue(fontFaceString, "x-height", out x_height);
-			GetIntValue(fontFaceString, "cap-height", out cap_height);
-
-			String bboxString = GetStringValue(fontFaceString, "bbox");
-			String[] valuesString = bboxString.Split(' ');
-			int.TryParse(valuesString[0], out boundingBox.Left);
-			int.TryParse(valuesString[1], out boundingBox.Bottom);
-			int.TryParse(valuesString[2], out boundingBox.Right);
-			int.TryParse(valuesString[3], out boundingBox.Top);
-
-			GetIntValue(fontFaceString, "underline-thickness", out underline_thickness);
-			GetIntValue(fontFaceString, "underline-position", out underline_position);
-			unicode_range = GetStringValue(fontFaceString, "unicode-range");
-
-			String missingGlyphString = GetSubString(svgContent, "<missing-glyph", "/>", ref startIndex);
-			missingGlyph = CreateGlyphFromSVGGlyphData(missingGlyphString);
-
-			String nextGlyphString = GetSubString(svgContent, "<glyph", "/>", ref startIndex);
-			while (nextGlyphString != null)
-			{
-				// get the data and put it in the glyph dictionary
-				Glyph newGlyph = CreateGlyphFromSVGGlyphData(nextGlyphString);
-				if (newGlyph.unicode > 0)
-				{
-					glyphs.Add(newGlyph.unicode, newGlyph);
-				}
-
-				nextGlyphString = GetSubString(svgContent, "<glyph", "/>", ref startIndex);
-			}
 		}
 
 		internal IVertexSource GetGlyphForCharacter(char character)
@@ -405,6 +262,145 @@ namespace MatterHackers.Agg.Font
 			graphics2D.Render(new TypeFacePrinter("Ascent"), textPos, ascentColor); textPos.y += legendFont.EmSizeInPixels;
 			graphics2D.Render(new TypeFacePrinter("Origin"), textPos, originColor); textPos.y += legendFont.EmSizeInPixels;
 			graphics2D.Render(new TypeFacePrinter("Bounding Box"), textPos, boundingBoxColor);
+		}
+	}
+
+	public static class SVGTypeFaceExtensions
+	{
+		private static String GetSubString(String source, String start, String end)
+		{
+			int startIndex = 0;
+			return GetSubString(source, start, end, ref startIndex);
+		}
+
+		private static String GetSubString(String source, String start, String end, ref int startIndex)
+		{
+			int startPos = source.IndexOf(start, startIndex);
+			if (startPos >= 0)
+			{
+				int endPos = source.IndexOf(end, startPos + start.Length);
+
+				int length = endPos - (startPos + start.Length);
+				startIndex = endPos + end.Length; // advance our start position to the last position used
+				return source.Substring(startPos + start.Length, length);
+			}
+
+			return null;
+		}
+
+		private static String GetStringValue(String source, String name)
+		{
+			String element = GetSubString(source, name + "=\"", "\"");
+			return element;
+		}
+
+		private static bool GetIntValue(String source, String name, out int outValue, ref int startIndex)
+		{
+			String element = GetSubString(source, name + "=\"", "\"", ref startIndex);
+			if (int.TryParse(element, NumberStyles.Number, null, out outValue))
+			{
+				return true;
+			}
+
+			return false;
+		}
+
+		private static bool GetIntValue(String source, String name, out int outValue)
+		{
+			int startIndex = 0;
+			return GetIntValue(source, name, out outValue, ref startIndex);
+		}
+
+		public static void ReadSVG(this TypeFace typeFace, String svgContent)
+		{
+			int readValue = 0;
+			int startIndex = 0;
+			String fontElementString = GetSubString(svgContent, "<font", ">", ref startIndex);
+			typeFace.fontId = GetStringValue(fontElementString, "id");
+			GetIntValue(fontElementString, "horiz-adv-x", out typeFace.horiz_adv_x);
+
+			String fontFaceString = GetSubString(svgContent, "<font-face", "/>", ref startIndex);
+			typeFace.fontFamily = GetStringValue(fontFaceString, "font-family");
+			GetIntValue(fontFaceString, "font-weight", out typeFace.font_weight);
+			typeFace.font_stretch = GetStringValue(fontFaceString, "font-stretch");
+			GetIntValue(fontFaceString, "units-per-em", out readValue); typeFace.UnitsPerEm = readValue;
+			typeFace.panose_1 = new TypeFace.Panos_1(GetStringValue(fontFaceString, "panose-1"));
+			GetIntValue(fontFaceString, "ascent", out typeFace.ascent);
+			GetIntValue(fontFaceString, "descent", out typeFace.descent);
+			GetIntValue(fontFaceString, "x-height", out typeFace.x_height);
+			GetIntValue(fontFaceString, "cap-height", out typeFace.cap_height);
+
+			String bboxString = GetStringValue(fontFaceString, "bbox");
+			String[] valuesString = bboxString.Split(' ');
+			int.TryParse(valuesString[0], out typeFace.boundingBox.Left);
+			int.TryParse(valuesString[1], out typeFace.boundingBox.Bottom);
+			int.TryParse(valuesString[2], out typeFace.boundingBox.Right);
+			int.TryParse(valuesString[3], out typeFace.boundingBox.Top);
+
+			GetIntValue(fontFaceString, "underline-thickness", out typeFace.underline_thickness);
+			GetIntValue(fontFaceString, "underline-position", out typeFace.underline_position);
+			typeFace.unicode_range = GetStringValue(fontFaceString, "unicode-range");
+
+			String missingGlyphString = GetSubString(svgContent, "<missing-glyph", "/>", ref startIndex);
+			typeFace.missingGlyph = typeFace.CreateGlyphFromSVGGlyphData(missingGlyphString);
+
+			String nextGlyphString = GetSubString(svgContent, "<glyph", "/>", ref startIndex);
+			while (nextGlyphString != null)
+			{
+				// get the data and put it in the glyph dictionary
+				TypeFace.Glyph newGlyph = typeFace.CreateGlyphFromSVGGlyphData(nextGlyphString);
+				if (newGlyph.unicode > 0)
+				{
+					typeFace.glyphs.Add(newGlyph.unicode, newGlyph);
+				}
+
+				nextGlyphString = GetSubString(svgContent, "<glyph", "/>", ref startIndex);
+			}
+		}
+
+		private static TypeFace.Glyph CreateGlyphFromSVGGlyphData(this TypeFace typeFace, String SVGGlyphData)
+		{
+			TypeFace.Glyph newGlyph = new TypeFace.Glyph();
+			if (!GetIntValue(SVGGlyphData, "horiz-adv-x", out newGlyph.horiz_adv_x))
+			{
+				newGlyph.horiz_adv_x = typeFace.horiz_adv_x;
+			}
+
+			newGlyph.glyphName = GetStringValue(SVGGlyphData, "glyph-name");
+			String unicodeString = GetStringValue(SVGGlyphData, "unicode");
+
+			if (unicodeString != null)
+			{
+				if (unicodeString.Length == 1)
+				{
+					newGlyph.unicode = (int)unicodeString[0];
+				}
+				else
+				{
+					if (unicodeString.Split(';').Length > 1 && unicodeString.Split(';')[1].Length > 0)
+					{
+						throw new NotImplementedException("We do not currently support glyphs longer than one character.  You need to write the search so that it will find them if you want to support this");
+					}
+
+					if (int.TryParse(unicodeString, NumberStyles.Number, null, out newGlyph.unicode) == false)
+					{
+						// see if it is a unicode
+						String hexNumber = GetSubString(unicodeString, "&#x", ";");
+						int.TryParse(hexNumber, NumberStyles.HexNumber, null, out newGlyph.unicode);
+					}
+				}
+			}
+
+			String dString = GetStringValue(SVGGlyphData, "d");
+
+			if (dString == null || dString.Length == 0)
+			{
+				return newGlyph;
+			}
+
+			newGlyph.glyphData.ParseSvgDString(dString);
+
+			return newGlyph;
 		}
 	}
 }
