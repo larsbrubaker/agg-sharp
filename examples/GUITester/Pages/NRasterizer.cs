@@ -28,40 +28,205 @@ either expressed or implied, of the FreeBSD Project.
 */
 
 using MatterHackers.Agg.Font;
-using MatterHackers.Agg.Transform;
 using MatterHackers.Agg.UI;
-using MatterHackers.Agg.VertexSource;
-using System.Collections.Generic;
 using System;
 using System.IO;
 using NRasterizer;
 
 namespace MatterHackers.Agg
 {
-	public class OpenTypeTypeFace : TypeFace
+	public static class OpenTypeTypeFaceExtensions
 	{
-		OpenTypeReader typeReader;
-
-		public OpenTypeTypeFace()
+		public static TypeFace LoadTTF(String filename)
 		{
-			typeReader = new OpenTypeReader();
+			TypeFace fontUnderConstruction = new TypeFace();
+
+			var reader = new OpenTypeReader();
+			using (var fs = File.OpenRead(filename))
+			{
+				var typeface = reader.Read(fs);
+				for(int  i=0; i<typeface.Glyphs.Count; i++)
+				{
+					var glyph = typeface.Glyphs[i];
+					CreateGlyphFromGlyph(glyph);
+				}
+			}
+
+			return fontUnderConstruction;
+		}
+
+		private static void CreateGlyphFromGlyph(Glyph glyph)
+		{
+			int x = 0;//glyphLayout.TopLeft.X;
+			int y = 0;// glyphLayout.TopLeft.Y;
+
+			#if false
+			var rasterizer = new ToPixelRasterizer(x, y, scalingFactor, FontToPixelDivisor, _rasterizer);
+
+			ushort[] contours = glyph.EndPoints;
+			short[] xs = glyph.X;
+			short[] ys = glyph.Y;
+			bool[] onCurves = glyph.On;
+
+			int npoints = xs.Length;
+			int startContour = 0;
+			int cpoint_index = 0;
+
+			rasterizer.BeginRead(contours.Length);
+
+			int lastMoveX = 0;
+			int lastMoveY = 0;
+
+			int controlPointCount = 0;
+			for (int i = 0; i < contours.Length; i++)
+			{
+				int nextContour = contours[startContour] + 1;
+				bool isFirstPoint = true;
+				Point<int> secondControlPoint = new Point<int>();
+				Point<int> thirdControlPoint = new Point<int>();
+				bool justFromCurveMode = false;
+
+				for (; cpoint_index < nextContour; ++cpoint_index)
+				{
+
+					short vpoint_x = xs[cpoint_index];
+					short vpoint_y = ys[cpoint_index];
+					if (onCurves[cpoint_index])
+					{
+						//on curve
+						if (justFromCurveMode)
+						{
+							switch (controlPointCount)
+							{
+								case 1:
+									{
+										rasterizer.Curve3(
+											secondControlPoint.x,
+											secondControlPoint.y,
+											vpoint_x,
+											vpoint_y);
+									}
+									break;
+								case 2:
+									{
+										rasterizer.Curve4(
+												secondControlPoint.x, secondControlPoint.y,
+												thirdControlPoint.x, thirdControlPoint.y,
+												vpoint_x, vpoint_y);
+									}
+									break;
+								default:
+									{
+										throw new NotSupportedException();
+									}
+							}
+							controlPointCount = 0;
+							justFromCurveMode = false;
+						}
+						else
+						{
+							if (isFirstPoint)
+							{
+								isFirstPoint = false;
+								lastMoveX = vpoint_x;
+								lastMoveY = vpoint_y;
+								rasterizer.MoveTo(lastMoveX, lastMoveY);
+							}
+							else
+							{
+								rasterizer.LineTo(vpoint_x, vpoint_y);
+							}
+						}
+					}
+					else
+					{
+						switch (controlPointCount)
+						{
+							case 0:
+								{
+									secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
+								}
+								break;
+							case 1:
+								{
+									//we already have prev second control point
+									//so auto calculate line to 
+									//between 2 point
+									Point<int> mid = GetMidPoint(secondControlPoint, vpoint_x, vpoint_y);
+									//----------
+									//generate curve3
+									rasterizer.Curve3(
+										secondControlPoint.x, secondControlPoint.y,
+										mid.x, mid.y);
+									//------------------------
+									controlPointCount--;
+									//------------------------
+									//printf("[%d] bzc2nd,  x: %d,y:%d \n", mm, vpoint.x, vpoint.y);
+									secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
+								}
+								break;
+							default:
+								{
+									throw new NotSupportedException("Too many control points");
+								}
+						}
+
+						controlPointCount++;
+						justFromCurveMode = true;
+					}
+				}
+				//--------
+				//close figure
+				//if in curve mode
+				if (justFromCurveMode)
+				{
+					switch (controlPointCount)
+					{
+						case 0: break;
+						case 1:
+							{
+								rasterizer.Curve3(
+									secondControlPoint.x, secondControlPoint.y,
+									lastMoveX, lastMoveY);
+							}
+							break;
+						case 2:
+							{
+								rasterizer.Curve4(
+									secondControlPoint.x, secondControlPoint.y,
+									thirdControlPoint.x, thirdControlPoint.y,
+									lastMoveX, lastMoveY);
+							}
+							break;
+						default:
+							{ throw new NotSupportedException("Too many control points"); }
+					}
+					justFromCurveMode = false;
+					controlPointCount = 0;
+				}
+				rasterizer.CloseFigure();
+				//--------                   
+				startContour++;
+			}
+			rasterizer.EndRead();
+			#endif
 		}
 	}
 
 	public class NRasterizerWidget : GuiWidget
 	{
 		string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-		OpenTypeTypeFace openTypeTypeFace;
+
+		TypeFace openTypeTypeFace;
 
 		public NRasterizerWidget()
 		{
 			AnchorAll();
 
-			string font = "CompositeMS.ttf";
-			font = "segoesc.ttf";
-			string fontPath = Path.Combine("C:", "Development", "NRasterizer", "Fonts", font);
-
-			openTypeTypeFace = new OpenTypeTypeFace();
+			string fontToLoad = "LiberationSans-Regular.ttf";
+			fontToLoad = "ARDESTINE.ttf";
+			fontToLoad = "OpenSans-Regular.ttf";
+			TypeFace openTypeTypeFace = OpenTypeTypeFaceExtensions.LoadTTF(fontToLoad);
 		}
 
 		public override void OnDraw(Graphics2D graphics2D)
