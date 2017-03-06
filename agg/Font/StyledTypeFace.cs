@@ -60,14 +60,14 @@ namespace MatterHackers.Agg.Font
 	{
 		private static StyledTypeFaceImageCache instance;
 
-		private Dictionary<TypeFace, Dictionary<RGBA_Bytes, Dictionary<double, Dictionary<char, ImageBuffer>>>> typeFaceImageCache = new Dictionary<TypeFace, Dictionary<RGBA_Bytes, Dictionary<double, Dictionary<char, ImageBuffer>>>>();
+		private Dictionary<ITypeFace, Dictionary<RGBA_Bytes, Dictionary<double, Dictionary<char, ImageBuffer>>>> typeFaceImageCache = new Dictionary<ITypeFace, Dictionary<RGBA_Bytes, Dictionary<double, Dictionary<char, ImageBuffer>>>>();
 
 		// private so you can't use it by accident (it is a singleton)
 		private StyledTypeFaceImageCache()
 		{
 		}
 
-		public static Dictionary<char, ImageBuffer> GetCorrectCache(TypeFace typeFace, RGBA_Bytes color, double emSizeInPoints)
+		public static Dictionary<char, ImageBuffer> GetCorrectCache(ITypeFace typeFace, RGBA_Bytes color, double emSizeInPoints)
 		{
 			lock(typeFace)
 			{
@@ -117,7 +117,7 @@ namespace MatterHackers.Agg.Font
 
     public class StyledTypeFace
     {
-        public TypeFace TypeFace { get; private set; }
+        public ITypeFace TypeFace { get; private set; }
 
 		private const int PointsPerInch = 72;
 		private const int PixelsPerInch = 96;
@@ -126,7 +126,7 @@ namespace MatterHackers.Agg.Font
 		private double currentEmScaling;
 		private bool flatenCurves = true;
 
-		public StyledTypeFace(TypeFace typeFace, double emSizeInPoints, bool underline = false, bool flatenCurves = true)
+		public StyledTypeFace(ITypeFace typeFace, double emSizeInPoints, bool underline = false, bool flatenCurves = true)
 		{
 			this.TypeFace = typeFace;
 			emSizeInPixels = emSizeInPoints / PointsPerInch * PixelsPerInch;

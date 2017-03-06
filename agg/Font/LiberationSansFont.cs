@@ -4,16 +4,16 @@ namespace MatterHackers.Agg.Font
 {
 	public class LiberationSansFont
 	{
-		private static TypeFace instance;
+		private static ITypeFace instance;
 
-		public static TypeFace Instance
+		public static ITypeFace Instance
 		{
 			get
 			{
 				if (instance == null)
 				{
-					instance = new TypeFace();
-					instance.ReadSVG(FontData());
+					instance = new SvgTypeFace();
+					((SvgTypeFace)instance).ReadSVG(FontData());
 				}
 
 				return instance;

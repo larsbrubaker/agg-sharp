@@ -27,25 +27,128 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using MatterHackers.Agg.Font;
-using MatterHackers.Agg.UI;
 using System;
 using System.IO;
+using MatterHackers.Agg.Font;
+using MatterHackers.Agg.UI;
+using MatterHackers.Agg.VertexSource;
 using NRasterizer;
 
 namespace MatterHackers.Agg
 {
-	public static class OpenTypeTypeFaceExtensions
+	public class NRasterizerWidget : GuiWidget
 	{
-		public static TypeFace LoadTTF(String filename)
+		private string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+		private OpenTypeTypeFace openTypeTypeFace;
+
+		public NRasterizerWidget()
 		{
-			TypeFace fontUnderConstruction = new TypeFace();
+			AnchorAll();
+
+			string fontToLoad = "LiberationSans-Regular.ttf";
+			fontToLoad = "ARDESTINE.ttf";
+			fontToLoad = "OpenSans-Regular.ttf";
+			//openTypeTypeFace = OpenTypeTypeFace.LoadTTF(fontToLoad);
+		}
+
+		public override void OnDraw(Graphics2D graphics2D)
+		{
+			//var openTypeStyliedTypeFace = new StyledTypeFace(openTypeTypeFace, 12);
+			//var openTypePrinter = new TypeFacePrinter(alphabet, StyledTypeFace typeFaceStyle, Vector2 origin = new Vector2(), Justification justification = Justification.Left, Baseline baseline = Baseline.Text)
+
+			double textY = 200;
+
+			base.OnDraw(graphics2D);
+
+			graphics2D.DrawString(alphabet, 20, textY);
+			graphics2D.DrawString(alphabet.ToLower(), 310, textY);
+		}
+	}
+
+	public class OpenTypeTypeFace : ITypeFace
+	{
+		public int Ascent
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public RectangleInt BoundingBox
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public int Cap_height
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public int Descent
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public string fontFamily
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public int Underline_position
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public int Underline_thickness
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public int UnitsPerEm
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public int X_height
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		public static OpenTypeTypeFace LoadTTF(String filename)
+		{
+			OpenTypeTypeFace fontUnderConstruction = new OpenTypeTypeFace();
 
 			var reader = new OpenTypeReader();
 			using (var fs = File.OpenRead(filename))
 			{
 				var typeface = reader.Read(fs);
-				for(int  i=0; i<typeface.Glyphs.Count; i++)
+				for (int i = 0; i < typeface.Glyphs.Count; i++)
 				{
 					var glyph = typeface.Glyphs[i];
 					CreateGlyphFromGlyph(glyph);
@@ -55,12 +158,27 @@ namespace MatterHackers.Agg
 			return fontUnderConstruction;
 		}
 
+		public int GetAdvanceForCharacter(char character)
+		{
+			throw new NotImplementedException();
+		}
+
+		public int GetAdvanceForCharacter(char character, char nextCharacterToKernWith)
+		{
+			throw new NotImplementedException();
+		}
+
+		public IVertexSource GetGlyphForCharacter(char character)
+		{
+			throw new NotImplementedException();
+		}
+
 		private static void CreateGlyphFromGlyph(Glyph glyph)
 		{
 			int x = 0;//glyphLayout.TopLeft.X;
 			int y = 0;// glyphLayout.TopLeft.Y;
 
-			#if false
+			/*
 			var rasterizer = new ToPixelRasterizer(x, y, scalingFactor, FontToPixelDivisor, _rasterizer);
 
 			ushort[] contours = glyph.EndPoints;
@@ -88,7 +206,6 @@ namespace MatterHackers.Agg
 
 				for (; cpoint_index < nextContour; ++cpoint_index)
 				{
-
 					short vpoint_x = xs[cpoint_index];
 					short vpoint_y = ys[cpoint_index];
 					if (onCurves[cpoint_index])
@@ -107,6 +224,7 @@ namespace MatterHackers.Agg
 											vpoint_y);
 									}
 									break;
+
 								case 2:
 									{
 										rasterizer.Curve4(
@@ -115,6 +233,7 @@ namespace MatterHackers.Agg
 												vpoint_x, vpoint_y);
 									}
 									break;
+
 								default:
 									{
 										throw new NotSupportedException();
@@ -147,10 +266,11 @@ namespace MatterHackers.Agg
 									secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
 								}
 								break;
+
 							case 1:
 								{
 									//we already have prev second control point
-									//so auto calculate line to 
+									//so auto calculate line to
 									//between 2 point
 									Point<int> mid = GetMidPoint(secondControlPoint, vpoint_x, vpoint_y);
 									//----------
@@ -165,6 +285,7 @@ namespace MatterHackers.Agg
 									secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
 								}
 								break;
+
 							default:
 								{
 									throw new NotSupportedException("Too many control points");
@@ -190,6 +311,7 @@ namespace MatterHackers.Agg
 									lastMoveX, lastMoveY);
 							}
 							break;
+
 						case 2:
 							{
 								rasterizer.Curve4(
@@ -198,6 +320,7 @@ namespace MatterHackers.Agg
 									lastMoveX, lastMoveY);
 							}
 							break;
+
 						default:
 							{ throw new NotSupportedException("Too many control points"); }
 					}
@@ -205,41 +328,11 @@ namespace MatterHackers.Agg
 					controlPointCount = 0;
 				}
 				rasterizer.CloseFigure();
-				//--------                   
+				//--------
 				startContour++;
 			}
 			rasterizer.EndRead();
-			#endif
-		}
-	}
-
-	public class NRasterizerWidget : GuiWidget
-	{
-		string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-		TypeFace openTypeTypeFace;
-
-		public NRasterizerWidget()
-		{
-			AnchorAll();
-
-			string fontToLoad = "LiberationSans-Regular.ttf";
-			fontToLoad = "ARDESTINE.ttf";
-			fontToLoad = "OpenSans-Regular.ttf";
-			TypeFace openTypeTypeFace = OpenTypeTypeFaceExtensions.LoadTTF(fontToLoad);
-		}
-
-		public override void OnDraw(Graphics2D graphics2D)
-		{
-			var openTypeStyliedTypeFace = new StyledTypeFace(openTypeTypeFace, 12);
-			//var openTypePrinter = new TypeFacePrinter(alphabet, StyledTypeFace typeFaceStyle, Vector2 origin = new Vector2(), Justification justification = Justification.Left, Baseline baseline = Baseline.Text)
-
-			double textY = 200;
-
-			base.OnDraw(graphics2D);
-
-			graphics2D.DrawString(alphabet, 20, textY);
-			graphics2D.DrawString(alphabet.ToLower(), 310, textY);
+			*/
 		}
 	}
 }

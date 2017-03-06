@@ -18,22 +18,88 @@
 using System;
 using System.Globalization;
 using System.IO;
+using MatterHackers.Agg.Transform;
+using MatterHackers.Agg.VertexSource;
+using MatterHackers.VectorMath;
 
 namespace MatterHackers.Agg.Font
 {
-	public static class SVGTypeFaceExtensions
+	public static class SvgTypeFaceExtensions
 	{
-		public static TypeFace LoadFrom(string content)
+		public static void ShowDebugInfo(this ITypeFace typeFace, Graphics2D graphics2D)
 		{
-			TypeFace fontUnderConstruction = new TypeFace();
+			StyledTypeFace typeFaceNameStyle = new StyledTypeFace(typeFace, 30);
+			TypeFacePrinter fontNamePrinter = new TypeFacePrinter(typeFace.fontFamily + " - 30 point", typeFaceNameStyle);
+
+			RectangleDouble bounds = typeFaceNameStyle.BoundingBoxInPixels;
+			double origX = 10 - bounds.Left;
+			double x = origX;
+			double y = 10 - typeFaceNameStyle.DescentInPixels;
+			int width = 50;
+			RGBA_Bytes boundingBoxColor = new RGBA_Bytes(0, 0, 0);
+			RGBA_Bytes originColor = new RGBA_Bytes(0, 0, 0);
+			RGBA_Bytes ascentColor = new RGBA_Bytes(255, 0, 0);
+			RGBA_Bytes descentColor = new RGBA_Bytes(255, 0, 0);
+			RGBA_Bytes xHeightColor = new RGBA_Bytes(12, 25, 200);
+			RGBA_Bytes capHeightColor = new RGBA_Bytes(12, 25, 200);
+			RGBA_Bytes underlineColor = new RGBA_Bytes(0, 150, 55);
+
+			// the origin
+			graphics2D.Line(x, y, x + width, y, originColor);
+
+			graphics2D.Rectangle(x + bounds.Left, y + bounds.Bottom, x + bounds.Right, y + bounds.Top, boundingBoxColor);
+
+			x += typeFaceNameStyle.BoundingBoxInPixels.Width * 1.5;
+
+			width = width * 3;
+
+			double temp = typeFaceNameStyle.AscentInPixels;
+			graphics2D.Line(x, y + temp, x + width, y + temp, ascentColor);
+
+			temp = typeFaceNameStyle.DescentInPixels;
+			graphics2D.Line(x, y + temp, x + width, y + temp, descentColor);
+
+			temp = typeFaceNameStyle.XHeightInPixels;
+			graphics2D.Line(x, y + temp, x + width, y + temp, xHeightColor);
+
+			temp = typeFaceNameStyle.CapHeightInPixels;
+			graphics2D.Line(x, y + temp, x + width, y + temp, capHeightColor);
+
+			temp = typeFaceNameStyle.UnderlinePositionInPixels;
+			graphics2D.Line(x, y + temp, x + width, y + temp, underlineColor);
+
+			Affine textTransform;
+			textTransform = Affine.NewIdentity();
+			textTransform *= Affine.NewTranslation(10, origX);
+
+			VertexSourceApplyTransform transformedText = new VertexSourceApplyTransform(textTransform);
+			fontNamePrinter.Render(graphics2D, RGBA_Bytes.Black, transformedText);
+
+			graphics2D.Render(transformedText, RGBA_Bytes.Black);
+
+			// render the legend
+			StyledTypeFace legendFont = new StyledTypeFace(typeFace, 12);
+			Vector2 textPos = new Vector2(x + width / 2, y + typeFaceNameStyle.EmSizeInPixels * 1.5);
+			graphics2D.Render(new TypeFacePrinter("Descent"), textPos, descentColor); textPos.y += legendFont.EmSizeInPixels;
+			graphics2D.Render(new TypeFacePrinter("Underline"), textPos, underlineColor); textPos.y += legendFont.EmSizeInPixels;
+			graphics2D.Render(new TypeFacePrinter("X Height"), textPos, xHeightColor); textPos.y += legendFont.EmSizeInPixels;
+			graphics2D.Render(new TypeFacePrinter("CapHeight"), textPos, capHeightColor); textPos.y += legendFont.EmSizeInPixels;
+			graphics2D.Render(new TypeFacePrinter("Ascent"), textPos, ascentColor); textPos.y += legendFont.EmSizeInPixels;
+			graphics2D.Render(new TypeFacePrinter("Origin"), textPos, originColor); textPos.y += legendFont.EmSizeInPixels;
+			graphics2D.Render(new TypeFacePrinter("Bounding Box"), textPos, boundingBoxColor);
+		}
+
+		public static ITypeFace LoadFrom(string content)
+		{
+			SvgTypeFace fontUnderConstruction = new SvgTypeFace();
 			fontUnderConstruction.ReadSVG(content);
 
 			return fontUnderConstruction;
 		}
 
-		public static TypeFace LoadSVG(String filename)
+		public static ITypeFace LoadSVG(String filename)
 		{
-			TypeFace fontUnderConstruction = new TypeFace();
+			SvgTypeFace fontUnderConstruction = new SvgTypeFace();
 
 			string svgContent = "";
 			using (FileStream fileStream = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
@@ -48,7 +114,7 @@ namespace MatterHackers.Agg.Font
 			return fontUnderConstruction;
 		}
 
-		public static void ReadSVG(this TypeFace typeFace, String svgContent)
+		public static void ReadSVG(this SvgTypeFace typeFace, String svgContent)
 		{
 			int readValue = 0;
 			int startIndex = 0;
@@ -89,7 +155,7 @@ namespace MatterHackers.Agg.Font
 			while (nextGlyphString != null)
 			{
 				// get the data and put it in the glyph dictionary
-				TypeFace.Glyph newGlyph = typeFace.CreateGlyphFromSVGGlyphData(nextGlyphString);
+				SvgTypeFace.Glyph newGlyph = typeFace.CreateGlyphFromSVGGlyphData(nextGlyphString);
 				if (newGlyph.unicode > 0)
 				{
 					typeFace.glyphs.Add(newGlyph.unicode, newGlyph);
@@ -99,9 +165,9 @@ namespace MatterHackers.Agg.Font
 			}
 		}
 
-		private static TypeFace.Glyph CreateGlyphFromSVGGlyphData(this TypeFace typeFace, String SVGGlyphData)
+		private static SvgTypeFace.Glyph CreateGlyphFromSVGGlyphData(this SvgTypeFace typeFace, String SVGGlyphData)
 		{
-			TypeFace.Glyph newGlyph = new TypeFace.Glyph();
+			SvgTypeFace.Glyph newGlyph = new SvgTypeFace.Glyph();
 			if (!GetIntValue(SVGGlyphData, "horiz-adv-x", out newGlyph.horiz_adv_x))
 			{
 				newGlyph.horiz_adv_x = typeFace.horiz_adv_x;

@@ -66,7 +66,7 @@ namespace MatterHackers.Agg.UI
 			}
 		}
 
-		public TextWidget(string text, double x = 0, double y = 0, double pointSize = 12, Justification justification = Justification.Left, RGBA_Bytes textColor = new RGBA_Bytes(), bool ellipsisIfClipped = true, bool underline = false, RGBA_Bytes backgroundColor = new RGBA_Bytes(), TypeFace typeFace = null)
+		public TextWidget(string text, double x = 0, double y = 0, double pointSize = 12, Justification justification = Justification.Left, RGBA_Bytes textColor = new RGBA_Bytes(), bool ellipsisIfClipped = true, bool underline = false, RGBA_Bytes backgroundColor = new RGBA_Bytes(), ITypeFace typeFace = null)
 		{
 			Selectable = false;
 			DoubleBuffer = DoubleBufferDefault;

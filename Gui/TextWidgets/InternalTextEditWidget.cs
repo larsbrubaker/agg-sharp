@@ -204,7 +204,7 @@ namespace MatterHackers.Agg.UI
 			}
 		}
 
-		public InternalTextEditWidget(string text, double pointSize, bool multiLine, int tabIndex, TypeFace typeFace = null)
+		public InternalTextEditWidget(string text, double pointSize, bool multiLine, int tabIndex, ITypeFace typeFace = null)
 		{
 			TabIndex = tabIndex;
 			TabStop = true;
