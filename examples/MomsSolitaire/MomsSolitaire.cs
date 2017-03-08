@@ -204,7 +204,7 @@ namespace MomsSolitaire
 							splitOnComma = splitOnSpace[i].Split(',');
 							double.TryParse(splitOnComma[0], NumberStyles.Number, null, out x);
 							double.TryParse(splitOnComma[1], NumberStyles.Number, null, out y);
-							path.curve4(xc1, yc1 + yOffset, xc2, yc2 + yOffset, x, y + yOffset);
+							path.Curve4(xc1, yc1 + yOffset, xc2, yc2 + yOffset, x, y + yOffset);
 						}
 						break;
 

@@ -421,7 +421,7 @@ namespace MatterHackers.Agg.VertexSource
 		/// <param name="yControl"></param>
 		/// <param name="x"></param>
 		/// <param name="y"></param>
-		public void curve3(double xControl, double yControl,
+		public void Curve3(double xControl, double yControl,
 								   double x, double y)
 		{
 			vertices.AddVertex(xControl, yControl, ShapePath.FlagsAndCommand.CommandCurve3);
@@ -454,7 +454,7 @@ namespace MatterHackers.Agg.VertexSource
 					x_ctrl = x0;
 					y_ctrl = y0;
 				}
-				curve3(x_ctrl, y_ctrl, x, y);
+				Curve3(x_ctrl, y_ctrl, x, y);
 			}
 		}
 
@@ -486,7 +486,7 @@ namespace MatterHackers.Agg.VertexSource
 			curve3(dx_to, dy_to);
 		}
 
-		public void curve4(double x_ctrl1, double y_ctrl1,
+		public void Curve4(double x_ctrl1, double y_ctrl1,
 								   double x_ctrl2, double y_ctrl2,
 								   double x_to, double y_to)
 		{
@@ -515,7 +515,7 @@ namespace MatterHackers.Agg.VertexSource
 					x_ctrl1 = x0;
 					y_ctrl1 = y0;
 				}
-				curve4(x_ctrl1, y_ctrl1, x_ctrl2, y_ctrl2, x_to, y_to);
+				Curve4(x_ctrl1, y_ctrl1, x_ctrl2, y_ctrl2, x_to, y_to);
 			}
 		}
 
@@ -539,7 +539,7 @@ namespace MatterHackers.Agg.VertexSource
 			curve4(dx_ctrl2, dy_ctrl2, dx_to, dy_to);
 		}
 
-		public void end_poly()
+		public void EndPolygon()
 		{
 			close_polygon(ShapePath.FlagsAndCommand.FlagClose);
 		}
@@ -762,7 +762,7 @@ namespace MatterHackers.Agg.VertexSource
 									curXY += lastXY;
 								}
 
-								this.curve4(controlPoint1.x, controlPoint1.y, secondControlPoint.x, secondControlPoint.y, curXY.x, curXY.y);
+								this.Curve4(controlPoint1.x, controlPoint1.y, secondControlPoint.x, secondControlPoint.y, curXY.x, curXY.y);
 								
 								// if the next element is another coordinate than we just continue to add more curves.
 							} while(NextElementIsANumber(dString, parseIndex));
@@ -804,7 +804,7 @@ namespace MatterHackers.Agg.VertexSource
 									curXY += lastXY;
 								}
 
-								this.curve4(controlPoint1.x, controlPoint1.y, secondControlPoint.x, secondControlPoint.y, curXY.x, curXY.y);
+								this.Curve4(controlPoint1.x, controlPoint1.y, secondControlPoint.x, secondControlPoint.y, curXY.x, curXY.y);
 
 								// if the next element is another coordinate than we just continue to add more curves.
 							} while (NextElementIsANumber(dString, parseIndex));
@@ -872,7 +872,7 @@ namespace MatterHackers.Agg.VertexSource
 								curXY += lastXY;
 							}
 
-							this.curve3(controlPoint.x, controlPoint.y, curXY.x, curXY.y);
+							this.Curve3(controlPoint.x, controlPoint.y, curXY.x, curXY.y);
 						}
 						break;
 

@@ -27,7 +27,7 @@ namespace NRasterizer.Tables
             long tableEndAt = tableStart + length;
 
 
-            if (format == 4)
+            if (format == 4 || format == 6)
             {
                 var version = input.ReadUInt16();
                 var segCountX2 = input.ReadUInt16();

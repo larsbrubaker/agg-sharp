@@ -28,10 +28,12 @@ either expressed or implied, of the FreeBSD Project.
 */
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using MatterHackers.Agg.Font;
 using MatterHackers.Agg.UI;
 using MatterHackers.Agg.VertexSource;
+using MatterHackers.VectorMath;
 using NRasterizer;
 
 namespace MatterHackers.Agg
@@ -47,27 +49,43 @@ namespace MatterHackers.Agg
 			AnchorAll();
 
 			string fontToLoad = "LiberationSans-Regular.ttf";
-			fontToLoad = "ARDESTINE.ttf";
-			fontToLoad = "OpenSans-Regular.ttf";
-			//openTypeTypeFace = OpenTypeTypeFace.LoadTTF(fontToLoad);
+			//fontToLoad = "ARDESTINE.ttf";
+			//fontToLoad = "OpenSans-Regular.ttf";
+			openTypeTypeFace = OpenTypeTypeFace.LoadTTF(fontToLoad);
 		}
 
 		public override void OnDraw(Graphics2D graphics2D)
 		{
-			//var openTypeStyliedTypeFace = new StyledTypeFace(openTypeTypeFace, 12);
-			//var openTypePrinter = new TypeFacePrinter(alphabet, StyledTypeFace typeFaceStyle, Vector2 origin = new Vector2(), Justification justification = Justification.Left, Baseline baseline = Baseline.Text)
-
 			double textY = 200;
 
 			base.OnDraw(graphics2D);
 
-			graphics2D.DrawString(alphabet, 20, textY);
-			graphics2D.DrawString(alphabet.ToLower(), 310, textY);
+			graphics2D.DrawString(alphabet, 20, textY, color: RGBA_Bytes.Green);
+			graphics2D.DrawString(alphabet.ToLower(), 310, textY, color: RGBA_Bytes.Green);
+
+			var openTypeStyliedTypeFace = new StyledTypeFace(openTypeTypeFace, 12);
+			var openTypePrinter = new TypeFacePrinter(alphabet, openTypeStyliedTypeFace, new Vector2(20, textY + 20));
+			openTypePrinter.Render(graphics2D, RGBA_Bytes.Red);
+			openTypePrinter.Text = alphabet.ToLower();
+			openTypePrinter.Origin = new Vector2(310, textY + 20);
+			openTypePrinter.Render(graphics2D, RGBA_Bytes.Red);
+
+			textY = 260;
+			openTypePrinter.Text = alphabet;
+			graphics2D.DrawString(alphabet, 20, textY, color: new RGBA_Bytes(RGBA_Bytes.Green, 128));
+			graphics2D.DrawString(alphabet.ToLower(), 310, textY, color: new RGBA_Bytes(RGBA_Bytes.Green, 128));
+
+			openTypePrinter.Origin = new Vector2(20, textY);
+			openTypePrinter.Render(graphics2D, new RGBA_Bytes(RGBA_Bytes.Red, 128));
+			openTypePrinter.Text = alphabet.ToLower();
+			openTypePrinter.Origin = new Vector2(310, textY);
+			openTypePrinter.Render(graphics2D, new RGBA_Bytes(RGBA_Bytes.Red, 128));
 		}
 	}
 
 	public class OpenTypeTypeFace : ITypeFace
 	{
+		Typeface typeface;
 		public int Ascent
 		{
 			get
@@ -128,7 +146,7 @@ namespace MatterHackers.Agg
 		{
 			get
 			{
-				throw new NotImplementedException();
+				return typeface.UnitsPerEm;
 			}
 		}
 
@@ -147,12 +165,7 @@ namespace MatterHackers.Agg
 			var reader = new OpenTypeReader();
 			using (var fs = File.OpenRead(filename))
 			{
-				var typeface = reader.Read(fs);
-				for (int i = 0; i < typeface.Glyphs.Count; i++)
-				{
-					var glyph = typeface.Glyphs[i];
-					CreateGlyphFromGlyph(glyph);
-				}
+				fontUnderConstruction.typeface = reader.Read(fs);
 			}
 
 			return fontUnderConstruction;
@@ -160,179 +173,185 @@ namespace MatterHackers.Agg
 
 		public int GetAdvanceForCharacter(char character)
 		{
-			throw new NotImplementedException();
+			var vertexSource = GetGlyphForCharacter(character);
+			return typeface.GetAdvanceWidth(character);
 		}
 
 		public int GetAdvanceForCharacter(char character, char nextCharacterToKernWith)
 		{
-			throw new NotImplementedException();
+			return GetAdvanceForCharacter(character);
 		}
 
+		Dictionary<char, PathStorage> glyphCache = new Dictionary<char, PathStorage>();
 		public IVertexSource GetGlyphForCharacter(char character)
 		{
-			throw new NotImplementedException();
-		}
-
-		private static void CreateGlyphFromGlyph(Glyph glyph)
-		{
-			int x = 0;//glyphLayout.TopLeft.X;
-			int y = 0;// glyphLayout.TopLeft.Y;
-
-			/*
-			var rasterizer = new ToPixelRasterizer(x, y, scalingFactor, FontToPixelDivisor, _rasterizer);
-
-			ushort[] contours = glyph.EndPoints;
-			short[] xs = glyph.X;
-			short[] ys = glyph.Y;
-			bool[] onCurves = glyph.On;
-
-			int npoints = xs.Length;
-			int startContour = 0;
-			int cpoint_index = 0;
-
-			rasterizer.BeginRead(contours.Length);
-
-			int lastMoveX = 0;
-			int lastMoveY = 0;
-
-			int controlPointCount = 0;
-			for (int i = 0; i < contours.Length; i++)
+			if (!glyphCache.ContainsKey(character))
 			{
-				int nextContour = contours[startContour] + 1;
-				bool isFirstPoint = true;
-				Point<int> secondControlPoint = new Point<int>();
-				Point<int> thirdControlPoint = new Point<int>();
-				bool justFromCurveMode = false;
+				PathStorage newGlyphPath = new PathStorage();
 
-				for (; cpoint_index < nextContour; ++cpoint_index)
+				int x = 0;//glyphLayout.TopLeft.X;
+				int y = 0;// glyphLayout.TopLeft.Y;
+
+				//var rasterizer = new ToPixelRasterizer(x, y, scalingFactor, FontToPixelDivisor, _rasterizer);
+
+				var glyph = typeface.Lookup(character);
+
+				ushort[] contours = glyph.EndPoints;
+				short[] xs = glyph.X;
+				short[] ys = glyph.Y;
+				bool[] onCurves = glyph.On;
+
+				int npoints = xs.Length;
+				int startContour = 0;
+				int cpoint_index = 0;
+
+				//rasterizer.BeginRead(contours.Length);
+
+				int lastMoveX = 0;
+				int lastMoveY = 0;
+
+				int controlPointCount = 0;
+				for (int i = 0; i < contours.Length; i++)
 				{
-					short vpoint_x = xs[cpoint_index];
-					short vpoint_y = ys[cpoint_index];
-					if (onCurves[cpoint_index])
+					int nextContour = contours[startContour] + 1;
+					bool isFirstPoint = true;
+					Point<int> secondControlPoint = new Point<int>();
+					Point<int> thirdControlPoint = new Point<int>();
+					bool justFromCurveMode = false;
+
+					for (; cpoint_index < nextContour; ++cpoint_index)
 					{
-						//on curve
-						if (justFromCurveMode)
+						short vpoint_x = xs[cpoint_index];
+						short vpoint_y = ys[cpoint_index];
+						if (onCurves[cpoint_index])
+						{
+							//on curve
+							if (justFromCurveMode)
+							{
+								switch (controlPointCount)
+								{
+									case 1:
+										{
+											newGlyphPath.Curve3(
+												secondControlPoint.x,
+												secondControlPoint.y,
+												vpoint_x,
+												vpoint_y);
+										}
+										break;
+
+									case 2:
+										{
+											newGlyphPath.Curve4(
+													secondControlPoint.x, secondControlPoint.y,
+													thirdControlPoint.x, thirdControlPoint.y,
+													vpoint_x, vpoint_y);
+										}
+										break;
+
+									default:
+										{
+											throw new NotSupportedException();
+										}
+								}
+								controlPointCount = 0;
+								justFromCurveMode = false;
+							}
+							else
+							{
+								if (isFirstPoint)
+								{
+									isFirstPoint = false;
+									lastMoveX = vpoint_x;
+									lastMoveY = vpoint_y;
+									newGlyphPath.MoveTo(lastMoveX, lastMoveY);
+								}
+								else
+								{
+									newGlyphPath.LineTo(vpoint_x, vpoint_y);
+								}
+							}
+						}
+						else
 						{
 							switch (controlPointCount)
 							{
-								case 1:
+								case 0:
 									{
-										rasterizer.Curve3(
-											secondControlPoint.x,
-											secondControlPoint.y,
-											vpoint_x,
-											vpoint_y);
+										secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
 									}
 									break;
 
-								case 2:
+								case 1:
 									{
-										rasterizer.Curve4(
-												secondControlPoint.x, secondControlPoint.y,
-												thirdControlPoint.x, thirdControlPoint.y,
-												vpoint_x, vpoint_y);
+										//we already have prev second control point
+										//so auto calculate line to
+										//between 2 point
+										Point<int> mid = new Point<int>((secondControlPoint.X + vpoint_x)/2, (secondControlPoint.Y + vpoint_y)/2);
+										//----------
+										//generate curve3
+										newGlyphPath.Curve3(
+											secondControlPoint.x, secondControlPoint.y,
+											mid.x, mid.y);
+										//------------------------
+										controlPointCount--;
+										//------------------------
+										//printf("[%d] bzc2nd,  x: %d,y:%d \n", mm, vpoint.x, vpoint.y);
+										secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
 									}
 									break;
 
 								default:
 									{
-										throw new NotSupportedException();
+										throw new NotSupportedException("Too many control points");
 									}
 							}
-							controlPointCount = 0;
-							justFromCurveMode = false;
-						}
-						else
-						{
-							if (isFirstPoint)
-							{
-								isFirstPoint = false;
-								lastMoveX = vpoint_x;
-								lastMoveY = vpoint_y;
-								rasterizer.MoveTo(lastMoveX, lastMoveY);
-							}
-							else
-							{
-								rasterizer.LineTo(vpoint_x, vpoint_y);
-							}
+
+							controlPointCount++;
+							justFromCurveMode = true;
 						}
 					}
-					else
+					//--------
+					//close figure
+					//if in curve mode
+					if (justFromCurveMode)
 					{
 						switch (controlPointCount)
 						{
-							case 0:
+							case 0: break;
+							case 1:
 								{
-									secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
+									newGlyphPath.Curve3(
+										secondControlPoint.x, secondControlPoint.y,
+										lastMoveX, lastMoveY);
 								}
 								break;
 
-							case 1:
+							case 2:
 								{
-									//we already have prev second control point
-									//so auto calculate line to
-									//between 2 point
-									Point<int> mid = GetMidPoint(secondControlPoint, vpoint_x, vpoint_y);
-									//----------
-									//generate curve3
-									rasterizer.Curve3(
+									newGlyphPath.Curve4(
 										secondControlPoint.x, secondControlPoint.y,
-										mid.x, mid.y);
-									//------------------------
-									controlPointCount--;
-									//------------------------
-									//printf("[%d] bzc2nd,  x: %d,y:%d \n", mm, vpoint.x, vpoint.y);
-									secondControlPoint = new Point<int>(vpoint_x, vpoint_y);
+										thirdControlPoint.x, thirdControlPoint.y,
+										lastMoveX, lastMoveY);
 								}
 								break;
 
 							default:
-								{
-									throw new NotSupportedException("Too many control points");
-								}
+								{ throw new NotSupportedException("Too many control points"); }
 						}
-
-						controlPointCount++;
-						justFromCurveMode = true;
+						justFromCurveMode = false;
+						controlPointCount = 0;
 					}
+					newGlyphPath.ClosePolygon();
+					//--------
+					startContour++;
 				}
-				//--------
-				//close figure
-				//if in curve mode
-				if (justFromCurveMode)
-				{
-					switch (controlPointCount)
-					{
-						case 0: break;
-						case 1:
-							{
-								rasterizer.Curve3(
-									secondControlPoint.x, secondControlPoint.y,
-									lastMoveX, lastMoveY);
-							}
-							break;
+				newGlyphPath.EndPolygon();
 
-						case 2:
-							{
-								rasterizer.Curve4(
-									secondControlPoint.x, secondControlPoint.y,
-									thirdControlPoint.x, thirdControlPoint.y,
-									lastMoveX, lastMoveY);
-							}
-							break;
-
-						default:
-							{ throw new NotSupportedException("Too many control points"); }
-					}
-					justFromCurveMode = false;
-					controlPointCount = 0;
-				}
-				rasterizer.CloseFigure();
-				//--------
-				startContour++;
+				glyphCache.Add(character, newGlyphPath);
 			}
-			rasterizer.EndRead();
-			*/
+
+			return glyphCache[character];
 		}
 	}
 }
