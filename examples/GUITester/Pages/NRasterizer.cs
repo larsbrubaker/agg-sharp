@@ -57,13 +57,14 @@ namespace MatterHackers.Agg
 		public override void OnDraw(Graphics2D graphics2D)
 		{
 			double textY = 200;
+			int pointSize = 12;
 
 			base.OnDraw(graphics2D);
 
-			graphics2D.DrawString(alphabet, 20, textY, color: RGBA_Bytes.Green);
-			graphics2D.DrawString(alphabet.ToLower(), 310, textY, color: RGBA_Bytes.Green);
+			graphics2D.DrawString(alphabet, 20, textY, pointSize, color: RGBA_Bytes.Green);
+			graphics2D.DrawString(alphabet.ToLower(), 310, textY, pointSize, color: RGBA_Bytes.Green);
 
-			var openTypeStyliedTypeFace = new StyledTypeFace(openTypeTypeFace, 12);
+			var openTypeStyliedTypeFace = new StyledTypeFace(openTypeTypeFace, pointSize);
 			var openTypePrinter = new TypeFacePrinter(alphabet, openTypeStyliedTypeFace, new Vector2(20, textY + 20));
 			openTypePrinter.Render(graphics2D, RGBA_Bytes.Red);
 			openTypePrinter.Text = alphabet.ToLower();
@@ -72,8 +73,8 @@ namespace MatterHackers.Agg
 
 			textY = 260;
 			openTypePrinter.Text = alphabet;
-			graphics2D.DrawString(alphabet, 20, textY, color: new RGBA_Bytes(RGBA_Bytes.Green, 128));
-			graphics2D.DrawString(alphabet.ToLower(), 310, textY, color: new RGBA_Bytes(RGBA_Bytes.Green, 128));
+			graphics2D.DrawString(alphabet, 20, textY, pointSize, color: new RGBA_Bytes(RGBA_Bytes.Green, 128));
+			graphics2D.DrawString(alphabet.ToLower(), 310, textY, pointSize, color: new RGBA_Bytes(RGBA_Bytes.Green, 128));
 
 			openTypePrinter.Origin = new Vector2(20, textY);
 			openTypePrinter.Render(graphics2D, new RGBA_Bytes(RGBA_Bytes.Red, 128));
@@ -189,11 +190,6 @@ namespace MatterHackers.Agg
 			{
 				PathStorage newGlyphPath = new PathStorage();
 
-				int x = 0;//glyphLayout.TopLeft.X;
-				int y = 0;// glyphLayout.TopLeft.Y;
-
-				//var rasterizer = new ToPixelRasterizer(x, y, scalingFactor, FontToPixelDivisor, _rasterizer);
-
 				var glyph = typeface.Lookup(character);
 
 				ushort[] contours = glyph.EndPoints;
@@ -204,8 +200,6 @@ namespace MatterHackers.Agg
 				int npoints = xs.Length;
 				int startContour = 0;
 				int cpoint_index = 0;
-
-				//rasterizer.BeginRead(contours.Length);
 
 				int lastMoveX = 0;
 				int lastMoveY = 0;
