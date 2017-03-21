@@ -40,7 +40,6 @@ using MatterHackers.VectorMath;
 
 //
 using Typography.OpenFont;
-using Typography.TextLayout;
 using Typography.Rendering;
 
 namespace MatterHackers.Agg
