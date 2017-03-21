@@ -55,10 +55,8 @@ namespace MatterHackers.Agg
         {
             AnchorAll();
 
-            //string fontToLoad = "LiberationSans-Regular.ttf";
-            //string fontToLoad = "ARDESTINE.ttf";
-            //fontToLoad = "OpenSans-Regular.ttf";
-            string fontToLoad = "tahoma.ttf";
+            string fontToLoad = "LiberationSans-Regular2.ttf";
+            //string fontToLoad = "ARDESTINE.ttf";             
             openTypeTypeFace = NOpenFontTypeFace.LoadTTF(fontToLoad);
         }
 
