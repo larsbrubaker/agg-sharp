@@ -141,6 +141,14 @@
       <Project>{AE37DE1F-22F7-49EE-8732-FC6BC8DC58D9}</Project>
       <Name>Tesselate</Name>
     </ProjectReference>
+    <ProjectReference Include="..\..\Typography\Typography.GlyphLayout\Typography.GlyphLayout.csproj">
+      <Project>{c48f2c17-3c32-4f27-a96c-60a9d86df9cf}</Project>
+      <Name>Typography.GlyphLayout</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Typography\Typography.OpenFont\N20\Typography.OpenFont\Typography.OpenFont.csproj">
+      <Project>{29ed0dfe-373c-4e98-bd4b-43f8e5fb16f6}</Project>
+      <Name>Typography.OpenFont</Name>
+    </ProjectReference>
     <ProjectReference Include="..\..\VectorMath\VectorMath.csproj">
       <Project>{D3E41B4E-BFBB-44CA-94C8-95C00F754FDD}</Project>
       <Name>VectorMath</Name>
@@ -165,6 +173,7 @@
     <Compile Include="Pages\TabPagesPage.cs" />
     <Compile Include="Pages\TextEditPage.cs" />
     <Compile Include="Pages\WindowPage.cs" />
+    <Compile Include="Pages\TypographyPage.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="System" />
