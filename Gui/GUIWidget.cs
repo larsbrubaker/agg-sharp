@@ -217,8 +217,6 @@ namespace MatterHackers.Agg.UI
 			get { return this.UnderMouseState == UnderMouseState.FirstUnderMouse; }
 		}
 
-		private RectangleDouble localBounds;
-
 		private bool visible = true;
 		private bool enabled = true;
 
@@ -467,7 +465,6 @@ namespace MatterHackers.Agg.UI
 			HAnchor = HAnchor.Center;
 		}
 
-		protected Transform.Affine parentToChildTransform = Affine.NewIdentity();
 		private ObservableCollection<GuiWidget> children = new ObservableCollection<GuiWidget>();
 
 		private bool containsFocus = false;
@@ -565,8 +562,6 @@ namespace MatterHackers.Agg.UI
 
 		public event EventHandler ChildRemoved;
 
-		private static readonly RectangleDouble largestValidBounds = new RectangleDouble(-1000000, -1000000, 1000000, 1000000);
-
 		public GuiWidget(double width, double height, SizeLimitsToSet sizeLimits = SizeLimitsToSet.Minimum)
 			: this()
 		{
@@ -621,16 +616,7 @@ namespace MatterHackers.Agg.UI
 		{
 			get
 			{
-				return parentToChildTransform;
-			}
-
-			set
-			{
-				//if (parentToChildTransform != value)
-				{
-					parentToChildTransform = value;
-					screenClipping.MarkRecalculate();
-				}
+				return Affine.NewTranslation(Position);
 			}
 		}
 
@@ -799,61 +785,26 @@ namespace MatterHackers.Agg.UI
 		/// <summary>
 		/// The bottom left position of the widget in its parent space (or the logical/intuitive position).
 		/// </summary>
+		Vector2 _position;
 		public Vector2 Position
 		{
 			get
 			{
-				var bounds = BoundsRelativeToParent;
-				return new Vector2(bounds.Left, bounds.Bottom);
+				return _position;
 			}
 
 			set
 			{
-				var delta = value - Position;
-				OriginRelativeParent = OriginRelativeParent + delta;
-			}
-		}
-
-		/// <summary>
-		/// The width height of the control (its size!)
-		/// </summary>
-		public Vector2 Size
-		{
-			get
-			{
-				return new Vector2(LocalBounds.Width, LocalBounds.Height);
-			}
-
-			set
-			{
-				Width = value.x;
-				Height = value.y;
-			}
-		}
-
-		public virtual Vector2 OriginRelativeParent
-		{
-			get
-			{
-				Affine tempLocalToParentTransform = ParentToChildTransform;
-				Vector2 originRelParent = new Vector2(tempLocalToParentTransform.tx, tempLocalToParentTransform.ty);
-				return originRelParent;
-			}
-			set
-			{
-				Affine tempLocalToParentTransform = ParentToChildTransform;
 				if (EnforceIntegerBounds)
 				{
 					value.x = Floor(value.x);
 					value.y = Floor(value.y);
 				}
 
-				if (tempLocalToParentTransform.tx != value.x || tempLocalToParentTransform.ty != value.y)
+				if (Position != value)
 				{
 					screenClipping.MarkRecalculate();
-					tempLocalToParentTransform.tx = value.x;
-					tempLocalToParentTransform.ty = value.y;
-					ParentToChildTransform = tempLocalToParentTransform;
+					_position = value;
 					Invalidate();
 					if (this.Parent != null)
 					{
@@ -870,6 +821,61 @@ namespace MatterHackers.Agg.UI
 					}
 					OnPositionChanged(null);
 				}
+			}
+		}
+
+		/// <summary>
+		/// The width height of the control (its size!)
+		/// </summary>
+		Vector2 _size;
+		public Vector2 Size
+		{
+			get
+			{
+				return _size;
+			}
+
+			set
+			{
+				value.x = Math.Max(Math.Min(value.x, MaximumSize.x), MinimumSize.x);
+				value.y = Math.Max(Math.Min(value.y, MaximumSize.y), MinimumSize.y);
+
+				if (EnforceIntegerBounds)
+				{
+					value.x = Floor(value.x);
+					value.y = Floor(value.y);
+				}
+
+				if (_size != value)
+				{
+					_size = value;
+
+					OnLayout(new LayoutEventArgs(this, null, PropertyCausingLayout.LocalBounds));
+					this.Parent?.OnLayout(new LayoutEventArgs(this.Parent, this, PropertyCausingLayout.ChildLocalBounds));
+
+					Invalidate();
+
+					if (DoubleBuffer)
+					{
+						AllocateBackBuffer();
+					}
+
+					OnBoundsChanged(null);
+
+					screenClipping.MarkRecalculate();
+				}
+			}
+		}
+
+		public virtual Vector2 OriginRelativeParent
+		{
+			get
+			{
+				return Position;
+			}
+			set
+			{
+				Position = value;
 			}
 		}
 
@@ -894,60 +900,12 @@ namespace MatterHackers.Agg.UI
 		{
 			get
 			{
-				return localBounds;
+				return new RectangleDouble(0, 0, Width, Height);
 			}
 
 			set
 			{
-				if (value.Width < MinimumSize.x)
-				{
-					value.Right = value.Left + MinimumSize.x;
-				}
-				else if (value.Width > MaximumSize.x)
-				{
-					value.Right = value.Left + MaximumSize.x;
-				}
-
-				if (value.Height < MinimumSize.y)
-				{
-					value.Top = value.Bottom + MinimumSize.y;
-				}
-				else if (value.Height > MaximumSize.y)
-				{
-					value.Top = value.Bottom + MaximumSize.y;
-				}
-
-				if (EnforceIntegerBounds)
-				{
-					value.Left = Floor(value.Left);
-					value.Bottom = Floor(value.Bottom);
-					value.Right = Ceiling(value.Right);
-					value.Top = Ceiling(value.Top);
-				}
-
-				if (localBounds != value)
-				{
-					if (!largestValidBounds.Contains(value))
-					{
-						BreakInDebugger("The bounds you are passing seems like they are probably wrong.  Check it.");
-					}
-
-					localBounds = value;
-
-					OnLayout(new LayoutEventArgs(this, null, PropertyCausingLayout.LocalBounds));
-					this.Parent?.OnLayout(new LayoutEventArgs(this.Parent, this, PropertyCausingLayout.ChildLocalBounds));
-
-					Invalidate();
-
-					if (DoubleBuffer)
-					{
-						AllocateBackBuffer();
-					}
-
-					OnBoundsChanged(null);
-
-					screenClipping.MarkRecalculate();
-				}
+				Size = new Vector2(value.Width, value.Height);
 			}
 		}
 
@@ -1294,13 +1252,11 @@ namespace MatterHackers.Agg.UI
 		{
 			get
 			{
-				return LocalBounds.Width;
+				return Size.x;
 			}
 			set
 			{
-				RectangleDouble localBounds = LocalBounds;
-				localBounds.Right = localBounds.Left + value;
-				LocalBounds = localBounds;
+				Size = new Vector2(value, Size.y);
 			}
 		}
 
@@ -1308,13 +1264,11 @@ namespace MatterHackers.Agg.UI
 		{
 			get
 			{
-				return LocalBounds.Height;
+				return Size.y;
 			}
 			set
 			{
-				RectangleDouble localBounds = LocalBounds;
-				localBounds.Top = localBounds.Bottom + value;
-				LocalBounds = localBounds;
+				Size = new Vector2(Size.x, value);
 			}
 		}
 
