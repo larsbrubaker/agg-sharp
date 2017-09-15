@@ -27,8 +27,11 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
+using System;
+using System.IO;
 using MatterHackers.Agg.Font;
 using MatterHackers.Agg.Image;
+using MatterHackers.Agg.Platform;
 using MatterHackers.Agg.Transform;
 using MatterHackers.Agg.VertexSource;
 using MatterHackers.VectorMath;
@@ -39,7 +42,7 @@ namespace MatterHackers.Agg.UI.Tests
 	[TestFixture, Category("Agg.UI")]
 	public class TextAndTextWidgetTests
 	{
-		public bool saveImagesForDebug;
+		public bool saveImagesForDebug = true;
 
 		[Test]
 		public void TextWidgetAutoSizeTest()
@@ -124,9 +127,8 @@ namespace MatterHackers.Agg.UI.Tests
 
 				if (saveImagesForDebug)
 				{
-					ImageTgaIO.Save(rectangleWidget.BackBuffer, "-rectangleWidget.tga");
-					//ImageTgaIO.Save(itemToAdd.Children[0].BackBuffer, "-internalTextWidget.tga");
-					ImageTgaIO.Save(textOnly, "-textOnly.tga");
+					SaveTest(rectangleWidget.BackBuffer);
+					SaveControl(textOnly);
 				}
 
 				Assert.IsTrue(rectangleWidget.BackBuffer.FindLeastSquaresMatch(textOnly, 1), "TextWidgets need to be drawing.");
@@ -145,19 +147,28 @@ namespace MatterHackers.Agg.UI.Tests
 				textOnly.NewGraphics2D().Clear(RGBA_Bytes.White);
 
 				TypeFacePrinter stringPrinter = new TypeFacePrinter("test Item", 12);
-				IVertexSource offsetText = new VertexSourceApplyTransform(stringPrinter, Affine.NewTranslation(1, -stringPrinter.LocalBounds.Bottom));
+				IVertexSource offsetText = new VertexSourceApplyTransform(stringPrinter, Affine.NewTranslation(1, (int)-stringPrinter.LocalBounds.Bottom));
 				textOnly.NewGraphics2D().Render(offsetText, RGBA_Bytes.Black);
 
 				if (saveImagesForDebug)
 				{
-					ImageTgaIO.Save(rectangleWidget.BackBuffer, "-rectangleWidget.tga");
-					//ImageTgaIO.Save(itemToAdd.Children[0].BackBuffer, "-internalTextWidget.tga");
-					ImageTgaIO.Save(textOnly, "-textOnly.tga");
+					SaveTest(rectangleWidget.BackBuffer);
+					SaveControl(textOnly);
 				}
 
 				Assert.IsTrue(rectangleWidget.BackBuffer.FindLeastSquaresMatch(textOnly, 1), "TextWidgets need to be drawing.");
 				rectangleWidget.Close();
 			}
+		}
+
+		private void SaveControl(ImageBuffer backBuffer)
+		{
+			AggContext.ImageIO.SaveImageData(Path.Combine(TestContext.CurrentContext.WorkDirectory, "text control.png"), backBuffer);
+		}
+
+		private void SaveTest(ImageBuffer backBuffer)
+		{
+			AggContext.ImageIO.SaveImageData(Path.Combine(TestContext.CurrentContext.WorkDirectory, "text test.png"), backBuffer);
 		}
 	}
 }

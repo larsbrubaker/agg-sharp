@@ -200,7 +200,7 @@ namespace MatterHackers.Agg.Font
 		{
 			if (text != null && text.Length > 0)
 			{
-				Vector2 currentOffset = new Vector2(0, 0);
+				Vector2 currentOffset = new Vector2(0, -TypeFaceStyle.DescentInPixels);
 
 				currentOffset = GetBaseline(currentOffset);
 
@@ -267,7 +267,7 @@ namespace MatterHackers.Agg.Font
 			switch (Baseline)
 			{
 				case Baseline.Text:
-					currentOffset.y = 0;
+					currentOffset.y = -TypeFaceStyle.DescentInPixels;
 					break;
 
 				case Baseline.BoundsTop:
