@@ -186,19 +186,18 @@ namespace DualContouring
 			root.Type = OctreeNodeType.Node_Internal;
 
 			root = ConstructOctreeNodes(f, root);
-			root = SimplifyOctree(root, threshold);
+			//root = SimplifyOctree(root, threshold);
 
 			return root;
 		}
 
 		public static Vector3 CalculateSurfaceNormal(Func<Vector3, double> f, Vector3 p)
 		{
-			double H = 0.001f;
-			double dx = f(p + new Vector3(H, 0.0f, 0.0f)) - f(p - new Vector3(H, 0.0f, 0.0f));
-			double dy = f(p + new Vector3(0.0f, H, 0.0f)) - f(p - new Vector3(0.0f, H, 0.0f));
-			double dz = f(p + new Vector3(0.0f, 0.0f, H)) - f(p - new Vector3(0.0f, 0.0f, H));
-
-			return new Vector3(dx, dy, dz).GetNormal();
+			double delta = 0.001f;
+			// get the gradient along each edge to create the normal
+			return new Vector3(f(p + new Vector3(delta, 0.0f, 0.0f)) - f(p - new Vector3(delta, 0.0f, 0.0f)),
+				f(p + new Vector3(0.0f, delta, 0.0f)) - f(p - new Vector3(0.0f, delta, 0.0f)),
+				f(p + new Vector3(0.0f, 0.0f, delta)) - f(p - new Vector3(0.0f, 0.0f, delta))).GetNormal();
 		}
 
 		public static OctreeNode ConstructLeaf(Func<Vector3, double> f, OctreeNode leaf)
@@ -227,8 +226,8 @@ namespace DualContouring
 			// otherwise the voxel contains the surface, so find the edge intersections
 			const int MAX_CROSSINGS = 6;
 			int edgeCount = 0;
+			var qef = new Qef.Qef();
 			Vector3 averageNormal = Vector3.Zero;
-			var qefSolver = new QefSolver();
 
 			for (int i = 0; i < 12 && edgeCount < MAX_CROSSINGS; i++)
 			{
@@ -258,20 +257,19 @@ namespace DualContouring
 					int a = 0;
 				}
 				Vector3 normal = CalculateSurfaceNormal(f, position);
-				qefSolver.Add(position, normal);
+				qef.Add(new Qef.Vec3(position), new Qef.Vec3(normal));
 
 				averageNormal += normal;
 
 				edgeCount++;
 			}
 
-			Vector3 qefPosition = qefSolver.Solve(QEF_ERROR, QEF_SWEEPS, QEF_ERROR);
-
 			var drawInfo = new OctreeDrawInfo();
 			drawInfo.corners = 0;
 			drawInfo.index = -1;
-			drawInfo.position = new Vector3(qefPosition.X, qefPosition.Y, qefPosition.Z);
-			drawInfo.qefData = qefSolver.QefData;
+			var xxx = qef.Solve(out Qef.Vec3 x);
+			drawInfo.position = new Vector3(x.x, x.y, x.z);
+			drawInfo.qef = qef;
 
 			Vector3 min = leaf.Min;
 			var max = min + leaf.Size;
@@ -279,7 +277,8 @@ namespace DualContouring
 				drawInfo.position.Y < min.Y || drawInfo.position.Y > max.Y ||
 				drawInfo.position.Z < min.Z || drawInfo.position.Z > max.Z)
 			{
-				drawInfo.position = qefSolver.GetMassPoint();
+				// throw new Exception("outside bounds");
+				// drawInfo.position = qefSolver.GetMassPoint();
 			}
 
 			drawInfo.averageNormal = Vector3.Normalize(averageNormal / (double)edgeCount);
@@ -649,7 +648,7 @@ namespace DualContouring
 				return node;
 			}
 
-			var qef = new QefSolver();
+			Qef.Qef qef = new Qef.Qef();
 			int[] signs = new int[8] { -1, -1, -1, -1, -1, -1, -1, -1 };
 			int midsign = -1;
 			int edgeCount = 0;
@@ -669,8 +668,7 @@ namespace DualContouring
 					}
 					else
 					{
-						qef.Add(child.drawInfo.qefData);
-
+						qef.Add(child.drawInfo.qef);
 						midsign = (child.drawInfo.corners >> (7 - i)) & 1;
 						signs[i] = (child.drawInfo.corners >> i) & 1;
 
@@ -685,8 +683,7 @@ namespace DualContouring
 				return node;
 			}
 
-			Vector3 position = qef.Solve(QEF_ERROR, QEF_SWEEPS, QEF_ERROR);
-			double error = qef.GetError();
+			var error = qef.Solve(out Qef.Vec3 x);
 
 			// at this point the masspoint will actually be a sum, so divide to make it the average
 			if (error > threshold)
@@ -695,12 +692,14 @@ namespace DualContouring
 				return node;
 			}
 
+#if false
 			if (position.X < node.Min.X || position.X > (node.Min.X + node.Size.X) ||
 				position.Y < node.Min.Y || position.Y > (node.Min.Y + node.Size.Y) ||
 				position.Z < node.Min.Z || position.Z > (node.Min.Z + node.Size.Z))
 			{
 				position = qef.GetMassPoint();
 			}
+#endif
 
 			// change the node from an internal node to a 'psuedo leaf' node
 			var drawInfo = new OctreeDrawInfo();
@@ -735,8 +734,7 @@ namespace DualContouring
 			}
 
 			drawInfo.averageNormal = drawInfo.averageNormal.GetNormal();
-			drawInfo.position = position;
-			drawInfo.qefData = qef.QefData;
+			drawInfo.qef = qef;
 
 			for (int i = 0; i < 8; i++)
 			{
