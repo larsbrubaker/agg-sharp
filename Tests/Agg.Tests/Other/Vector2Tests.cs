@@ -27,17 +27,16 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using Agg.Tests.Agg;
 using MatterHackers.VectorMath;
 using System;
 using System.Collections.Generic;
+using Xunit;
 
 namespace MatterHackers.Agg.Tests
 {
-    [MhTestFixture]
     public class Vector2Tests
 	{
-		[HMTest]
+		[Fact]
 		public void ArithmaticOperations()
 		{
 			var point1 = new Vector2(1, 1);
@@ -45,38 +44,38 @@ namespace MatterHackers.Agg.Tests
 			var point2 = new Vector2(2, 2);
 
 			Vector2 point3 = point1 + point2;
-			MHAssert.True(point3 == new Vector2(3, 3));
+			Assert.True(point3 == new Vector2(3, 3));
 
 			point3 = point1 - point2;
-			MHAssert.True(point3 == new Vector2(-1, -1));
+			Assert.True(point3 == new Vector2(-1, -1));
 
 			point3 += point1;
-			MHAssert.True(point3 == new Vector2(0, 0));
+			Assert.True(point3 == new Vector2(0, 0));
 
 			point3 += point2;
-			MHAssert.True(point3 == new Vector2(2, 2));
+			Assert.True(point3 == new Vector2(2, 2));
 
 			point3 *= 6;
-			MHAssert.True(point3 == new Vector2(12, 12));
+			Assert.True(point3 == new Vector2(12, 12));
 
 			var inlineOpLeftSide = new Vector2(5, -3);
 			var inlineOpRightSide = new Vector2(-5, 4);
-			MHAssert.True(inlineOpLeftSide + inlineOpRightSide == new Vector2(.0f, 1));
+			Assert.True(inlineOpLeftSide + inlineOpRightSide == new Vector2(.0f, 1));
 
-			MHAssert.True(inlineOpLeftSide - inlineOpRightSide == new Vector2(10.0f, -7));
+			Assert.True(inlineOpLeftSide - inlineOpRightSide == new Vector2(10.0f, -7));
 		}
 
-		[HMTest]
+		[Fact]
 		public void GetLengthAndNormalize()
 		{
 			var point3 = new Vector2(3, -4);
-			MHAssert.True(point3.Length > 4.999f && point3.Length < 5.001f);
+			Assert.True(point3.Length > 4.999f && point3.Length < 5.001f);
 
 			point3.Normalize();
-			MHAssert.True(point3.Length > 0.99f && point3.Length < 1.01f);
+			Assert.True(point3.Length > 0.99f && point3.Length < 1.01f);
 		}
 
-		[HMTest]
+		[Fact]
 		public void GetPositionAtTests()
 		{
 			var line1 = new List<Vector2>()
@@ -87,37 +86,37 @@ namespace MatterHackers.Agg.Tests
 				new Vector2(10, 13)
 			};
 
-			MHAssert.Equal(30, line1.PolygonLength(false));
+			Assert.Equal(30, line1.PolygonLength(false));
 
 			// open segments should also give correct values
-			MHAssert.Equal(new Vector2(13, 3), line1.GetPositionAt(3, false));
-			MHAssert.Equal(new Vector2(10, 13), line1.GetPositionAt(33, false)); //, "Open so return the end");
-            MHAssert.Equal(new Vector2(10, 13), line1.GetPositionAt(33 + 22 * 10, false)); //, "Open so return the end");
-            MHAssert.Equal(new Vector2(10, 3), line1.GetPositionAt(-2, false)); //, "Negative so return the start");
-            MHAssert.Equal(new Vector2(10, 3), line1.GetPositionAt(-2 + -23 * 10, false)); //, "Negative so return the start");
+			Assert.Equal(new Vector2(13, 3), line1.GetPositionAt(3, false));
+			Assert.Equal(new Vector2(10, 13), line1.GetPositionAt(33, false)); //, "Open so return the end");
+            Assert.Equal(new Vector2(10, 13), line1.GetPositionAt(33 + 22 * 10, false)); //, "Open so return the end");
+            Assert.Equal(new Vector2(10, 3), line1.GetPositionAt(-2, false)); //, "Negative so return the start");
+            Assert.Equal(new Vector2(10, 3), line1.GetPositionAt(-2 + -23 * 10, false)); //, "Negative so return the start");
 
-            MHAssert.Equal(40, line1.PolygonLength(true));
+            Assert.Equal(40, line1.PolygonLength(true));
 
 			// closed loops should wrap correctly
 			var error = .000001;
-			MHAssert.Equal(new Vector2(13, 3), line1.GetPositionAt(3));
-			MHAssert.True(new Vector2(13, 3).Equals(line1.GetPositionAt(43), error), "Closed loop so we should go back to the beginning");
-			MHAssert.True(new Vector2(13, 3).Equals(line1.GetPositionAt(43 + 22 * 40), error), "Closed loop so we should go back to the beginning");
-			MHAssert.True(new Vector2(10, 5).Equals(line1.GetPositionAt(-2), error), "Negative values are still valid");
-			MHAssert.True(new Vector2(10, 5).Equals(line1.GetPositionAt(-2 + 23 * 40), error), "Negative values are still valid");
+			Assert.Equal(new Vector2(13, 3), line1.GetPositionAt(3));
+			Assert.True(new Vector2(13, 3).Equals(line1.GetPositionAt(43), error), "Closed loop so we should go back to the beginning");
+			Assert.True(new Vector2(13, 3).Equals(line1.GetPositionAt(43 + 22 * 40), error), "Closed loop so we should go back to the beginning");
+			Assert.True(new Vector2(10, 5).Equals(line1.GetPositionAt(-2), error), "Negative values are still valid");
+			Assert.True(new Vector2(10, 5).Equals(line1.GetPositionAt(-2 + 23 * 40), error), "Negative values are still valid");
 		}
 
-		[HMTest]
+		[Fact]
 		public void ScalerOperations()
 		{
 			var scalarMultiplicationArgument = new Vector2(5.0f, 4.0f);
-			MHAssert.True(scalarMultiplicationArgument * -.5 == new Vector2(-2.5f, -2));
-			MHAssert.True(scalarMultiplicationArgument / 2 == new Vector2(2.5, 2));
-			MHAssert.True(2 / scalarMultiplicationArgument == new Vector2(.4, .5));
-			MHAssert.True(5 * scalarMultiplicationArgument == new Vector2(25, 20));
+			Assert.True(scalarMultiplicationArgument * -.5 == new Vector2(-2.5f, -2));
+			Assert.True(scalarMultiplicationArgument / 2 == new Vector2(2.5, 2));
+			Assert.True(2 / scalarMultiplicationArgument == new Vector2(.4, .5));
+			Assert.True(5 * scalarMultiplicationArgument == new Vector2(25, 20));
 		}
 
-		[HMTest]
+		[Fact]
 		public void CrossProduct()
 		{
 			var rand = new Random();
@@ -129,10 +128,10 @@ namespace MatterHackers.Agg.Tests
 			var testVector32 = new Vector3(testVector2D2.X, testVector2D2.Y, 0);
 			Vector3 cross3D = Vector3Ex.Cross(testVector31, testVector32);
 
-			MHAssert.True(cross3D.Z == cross2D);
+			Assert.True(cross3D.Z == cross2D);
 		}
 
-		[HMTest]
+		[Fact]
 		public void DotProduct()
 		{
 			var rand = new Random();
@@ -144,10 +143,10 @@ namespace MatterHackers.Agg.Tests
 			var testVector32 = new Vector3(testVector2D2.X, testVector2D2.Y, 0);
 			double cross3D = Vector3Ex.Dot(testVector31, testVector32);
 
-			MHAssert.True(cross3D == cross2D);
+			Assert.True(cross3D == cross2D);
 		}
 
-		[HMTest]
+		[Fact]
 		public void LengthAndDistance()
 		{
 			var rand = new Random();
@@ -157,7 +156,7 @@ namespace MatterHackers.Agg.Tests
 			double distance1 = test2.Length;
 			double distance2 = (test1 - test3).Length;
 
-			MHAssert.True(distance1 < distance2 + .001f && distance1 > distance2 - .001f);
+			Assert.True(distance1 < distance2 + .001f && distance1 > distance2 - .001f);
 		}
 	}
 }

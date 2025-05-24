@@ -485,7 +485,12 @@ namespace MatterHackers.Agg
 			}
 			return FlagsAndCommand.LineTo;
 		}
-	}
+
+        public ulong GetLongHashCode(ulong hash = 14695981039346656037)
+        {
+            throw new NotImplementedException();
+        }
+    }
 
 	internal class conv_poly_counter
 	{

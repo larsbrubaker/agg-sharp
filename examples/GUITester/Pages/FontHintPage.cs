@@ -107,7 +107,12 @@ namespace MatterHackers.Agg
 			}
 			return cmd;
 		}
-	}
+
+        public ulong GetLongHashCode(ulong hash = 14695981039346656037)
+        {
+            throw new NotImplementedException();
+        }
+    }
 
 	public class FontHintWidget : GuiWidget
 	{

@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Agg.Tests.Agg;
 using MatterHackers.Agg.Font;
 using MatterHackers.Agg.VertexSource;
 using MatterHackers.DataConverters2D;
@@ -163,6 +162,11 @@ namespace MatterHackers.Agg.Tests
 		private static RectangleDouble GetCharacterBounds(char character, StyledTypeFace typeface)
 		{
 			IVertexSource glyphForCharacter = typeface.GetGlyphForCharacter(character, 1);
+
+			if (glyphForCharacter == null)
+			{
+				return RectangleDouble.ZeroIntersection;
+			}
 
 			glyphForCharacter.Rewind(0);
 

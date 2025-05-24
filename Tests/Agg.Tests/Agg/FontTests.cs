@@ -21,10 +21,10 @@ namespace Agg.Tests.Agg
         {
             EnglishTextWrapping englishWrapping = new EnglishTextWrapping(8);
             List<string> wrappedLines = englishWrapping.WrapSingleLineOnWidth("Layers or MM", 30);
-            MHAssert.True(wrappedLines.Count == 3);
-            MHAssert.True(wrappedLines[0] == "Layer");
-            MHAssert.True(wrappedLines[1] == "s or");
-            MHAssert.True(wrappedLines[2] == "MM");
+            Assert.True(wrappedLines.Count == 3);
+            Assert.True(wrappedLines[0] == "Layer");
+            Assert.True(wrappedLines[1] == "s or");
+            Assert.True(wrappedLines[2] == "MM");
         }
     }
 }

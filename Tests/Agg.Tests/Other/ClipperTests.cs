@@ -32,17 +32,16 @@ using System.Collections.Generic;
 using ClipperLib;
 using MatterHackers.VectorMath;
 using System.IO;
-using Agg.Tests.Agg;
+using Xunit;
 
 namespace MatterHackers.Agg.Tests
 {
 	using Polygons = List<List<IntPoint>>;
 	using Polygon = List<IntPoint>;
 
-	[MhTestFixture]
 	public class ClipperTests
 	{
-		[HMTest]
+		[Fact]
 		public void CleanPolygonsTest()
 		{
 			var polygon = new Polygon();
@@ -68,7 +67,7 @@ namespace MatterHackers.Agg.Tests
 			{
 				var centerPoint = (cleanedPolygon[i + 1] + cleanedPolygon[i]) / 2;
 				var distToCenter = centerPoint.Length();
-				MHAssert.True(Math.Abs(length - distToCenter) <= 3);
+				Assert.True(Math.Abs(length - distToCenter) <= 3);
             }
 		}
 

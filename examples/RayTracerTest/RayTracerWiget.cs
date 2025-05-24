@@ -163,7 +163,7 @@ namespace MatterHackers.RayTracer
 
 			//renderCollection.Add(MakerGearXCariage());
 
-			allObjects = BoundingVolumeHierarchy.CreateNewHierachy(renderCollection);
+			allObjects = BoundingVolumeHierarchy.CreateNewHierarchy(renderCollection);
 			allObjectsHolder = new Transform(allObjects);
 			//allObjects = root;
 			scene.shapes.Add(allObjectsHolder);
@@ -259,7 +259,7 @@ namespace MatterHackers.RayTracer
 				scanData1.Add(littleShpere);
 			}
 
-			renderCollection.Add(BoundingVolumeHierarchy.CreateNewHierachy(scanData1));
+			renderCollection.Add(BoundingVolumeHierarchy.CreateNewHierarchy(scanData1));
 		}
 
 		private void AddBoxAndSheresBooleanTest()
@@ -294,7 +294,7 @@ namespace MatterHackers.RayTracer
             }
 #endif
 
-			var subtractGroup = BoundingVolumeHierarchy.CreateNewHierachy(subtractShapes);
+			var subtractGroup = BoundingVolumeHierarchy.CreateNewHierarchy(subtractShapes);
 			Difference merge = new Difference(box1, subtractGroup);
 
 			renderCollection.Add(merge);
@@ -309,7 +309,7 @@ namespace MatterHackers.RayTracer
 			SolidMaterial material = new SolidMaterial(ColorF.Red, 0, 0, 0);
 			subtractShapes.Add(new BoxShape(new Vector3(), new Vector3(1, 1, 1), material));
 
-			var subtractGroup = BoundingVolumeHierarchy.CreateNewHierachy(subtractShapes);
+			var subtractGroup = BoundingVolumeHierarchy.CreateNewHierarchy(subtractShapes);
 			Difference merge = new Difference(box1, subtractGroup);
 
 			renderCollection.Add(merge);
@@ -350,12 +350,13 @@ namespace MatterHackers.RayTracer
 
 			Stopwatch bvhTime = new Stopwatch();
 			bvhTime.Start();
-			var bvhCollection = MeshToBVH.Convert(simpleMesh);
+			throw new NotImplementedException();
+			//var bvhCollection = MeshToBVH.Convert(simpleMesh);
 			bvhTime.Stop();
 
 			timingStrings.Add("Time to create BVH {0:0.0}s".FormatWith(bvhTime.Elapsed.TotalSeconds));
 
-			renderCollection.Add(bvhCollection);
+			//renderCollection.Add(bvhCollection);
 		}
 
 		private void AddSphereAndBox()

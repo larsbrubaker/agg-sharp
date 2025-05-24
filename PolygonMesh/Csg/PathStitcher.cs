@@ -32,6 +32,7 @@ using ClipperLib;
 using MatterHackers.DataConverters2D;
 using MatterHackers.Agg.QuadTree;
 using MatterHackers.VectorMath;
+using System;
 
 namespace MatterHackers.PolygonMesh.Processors
 {
@@ -191,27 +192,76 @@ namespace MatterHackers.PolygonMesh.Processors
 		{
 			// given the start, find the closest next point along either polygon to move to
 			var outerStart = outerLoop[outerIndex];
-			var outerNextIndex = outerIndex + 1 % outerLoop.Count;
+			var outerNextIndex = (outerIndex + 1) % outerLoop.Count;
 			var outerNext = outerLoop[outerNextIndex];
             
 			var innerStart = innerLoop[innerIndex];
-			var innerNextIndex = innerIndex + 1 % innerLoop.Count;
+			var innerNextIndex = (innerIndex + 1) % innerLoop.Count;
 			var innerNext = innerLoop[innerNextIndex];
 
 			var distanceToInnerNext = (innerNext - outerStart).LengthSquared();
 			var distanceToOuterNext = (innerStart - outerNext).LengthSquared();
-            
-            if (distanceToInnerNext < distanceToOuterNext
-                && !innerLoop.SegmentTouching(outerStart, innerNext))
+			
+			// Check if the segment from outerStart to innerNext intersects the inner polygon
+			// excluding intersections at the endpoints (since innerNext is a vertex of innerLoop)
+			var outerToInnerIntersects = false;
+			for (int i = 0; i < innerLoop.Count; i++)
 			{
-                // check if segment innerNext - outerStart crosses any other line segments
-                return 1;
-            }
-            else
+				var edgeStart = innerLoop[i];
+				var edgeEnd = innerLoop[(i + 1) % innerLoop.Count];
+				
+				// Skip edges that have innerNext as an endpoint since that's where we're connecting to
+				if (edgeStart == innerNext || edgeEnd == innerNext)
+					continue;
+					
+				if (QTPolygonExtensions.DoIntersect(outerStart, innerNext, edgeStart, edgeEnd))
+				{
+					outerToInnerIntersects = true;
+					break;
+				}
+			}
+			
+			// Check if the segment from innerStart to outerNext intersects the outer polygon
+			// excluding intersections at the endpoints (since outerNext is a vertex of outerLoop)
+			var innerToOuterIntersects = false;
+			for (int i = 0; i < outerLoop.Count; i++)
 			{
-                // check if segment innerStart - outerNext crosses any other line segments
-                return 0;
-            }
+				var edgeStart = outerLoop[i];
+				var edgeEnd = outerLoop[(i + 1) % outerLoop.Count];
+				
+				// Skip edges that have outerNext as an endpoint since that's where we're connecting to
+				if (edgeStart == outerNext || edgeEnd == outerNext)
+					continue;
+					
+				if (QTPolygonExtensions.DoIntersect(innerStart, outerNext, edgeStart, edgeEnd))
+				{
+					innerToOuterIntersects = true;
+					break;
+				}
+			}
+			
+			// Prefer the option that doesn't intersect, then prefer shorter distance
+			bool canAdvanceInner = !outerToInnerIntersects;
+			bool canAdvanceOuter = !innerToOuterIntersects;
+			
+			if (canAdvanceInner && !canAdvanceOuter)
+			{
+				return 1; // Only inner is valid
+			}
+			else if (!canAdvanceInner && canAdvanceOuter)
+			{
+				return 0; // Only outer is valid
+			}
+			else if (canAdvanceInner && canAdvanceOuter)
+			{
+				// Both are valid, choose based on distance
+				return distanceToInnerNext < distanceToOuterNext ? 1 : 0;
+			}
+			else
+			{
+				// Neither is ideal, choose based on distance (fallback)
+				return distanceToInnerNext < distanceToOuterNext ? 1 : 0;
+			}
         }
 	}
 }

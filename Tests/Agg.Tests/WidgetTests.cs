@@ -27,14 +27,14 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using Agg.Tests.Agg;
+using Xunit;
 
 namespace MatterHackers.Agg.UI.Tests
 {
-    [MhTestFixture("Opens Winforms Window")]
+    [Collection("Opens Winforms Window")]
     public class WidgetTests
 	{
-        [HMTest]
+        [Fact]
         public void LoadEventFiresOnlyOnce()
 		{
 			// Issue MatterHackers/MCCentral#5072 - OnLoad / Load can fire more than once
@@ -60,7 +60,7 @@ namespace MatterHackers.Agg.UI.Tests
 
 			widget.OnDraw(widget.NewGraphics2D());
 
-			MHAssert.Equal(1, loadCount); //, "Load should fire at most, one time");
+			Assert.Equal(1, loadCount); //, "Load should fire at most, one time");
         }
 	}
 }

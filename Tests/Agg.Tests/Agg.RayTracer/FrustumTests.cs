@@ -27,14 +27,14 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using Agg.Tests.Agg;
+using Xunit;
 
 namespace MatterHackers.RayTracer
 {
-    [MhTestFixture("WorkInProgress")]
+    [Collection("WorkInProgress")]
 	public class FrustumTests
 	{
-		[HMTest]
+		[Fact]
 		public void RayBundleSameResultAsIndividualRays()
 		{
 		}

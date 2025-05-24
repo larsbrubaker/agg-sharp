@@ -27,13 +27,13 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using System.Diagnostics;
-using Agg.Tests.Agg;
 using MatterHackers.Agg.Image;
+using System.Diagnostics;
+using Xunit;
 
 namespace MatterHackers.Agg.UI.Tests
 {
-    [MhTestFixture("Opens Winforms Window")]
+    [Collection("Opens Winforms Window")]
     public class BorderTests
 	{
 		private int borderSize = 1;
@@ -48,7 +48,7 @@ namespace MatterHackers.Agg.UI.Tests
 			All = 4
 		}
 
-        [HMTest]
+        [Fact]
         public void BorderTestLeft()
 		{
 			var border = new BorderDouble(left: borderSize);
@@ -57,7 +57,7 @@ namespace MatterHackers.Agg.UI.Tests
 			AssertBorderWhereExpected(Regions.Left, border, surface);
 		}
 
-        [HMTest]
+        [Fact]
         public void BorderTestBottom()
 		{
 			var border = new BorderDouble(bottom: borderSize);
@@ -66,7 +66,7 @@ namespace MatterHackers.Agg.UI.Tests
 			AssertBorderWhereExpected(Regions.Bottom, border, surface);
 		}
 
-        [HMTest]
+        [Fact]
         public void BorderTestRight()
 		{
 			var border = new BorderDouble(right: borderSize);
@@ -75,7 +75,7 @@ namespace MatterHackers.Agg.UI.Tests
 			AssertBorderWhereExpected(Regions.Right, border, surface);
 		}
 
-        [HMTest]
+        [Fact]
         public void BorderTestTop()
 		{
 			var border = new BorderDouble(top: borderSize);
@@ -85,98 +85,109 @@ namespace MatterHackers.Agg.UI.Tests
 		}
 
         // Enable to visually debug
-        [HMTest]
+        //[Fact]
         public void BorderTestsVisualizer()
 		{
-			var systemWindow = new SystemWindow(700, 660)
+			// Disable drag-drop to avoid STA thread requirement
+			var originalEnableAllowDrop = SystemWindow.EnableAllowDrop;
+			SystemWindow.EnableAllowDrop = false;
+			
+			try
 			{
-				BackgroundColor = Color.LightGray,
-				Padding = 25
-			};
+				var systemWindow = new SystemWindow(700, 660)
+				{
+					BackgroundColor = Color.LightGray,
+					Padding = 25
+				};
 
-			var column = new FlowLayoutWidget(FlowDirection.TopToBottom)
-			{
-				HAnchor = HAnchor.Stretch,
-				VAnchor = VAnchor.Stretch,
-			};
-			systemWindow.AddChild(column);
-
-			int marginSize = 8;
-
-			GuiWidget heading;
-
-			for (var m = 0; m < 2; m++)
-			{
-				column.AddChild(heading = new GuiWidget()
+				var column = new FlowLayoutWidget(FlowDirection.TopToBottom)
 				{
 					HAnchor = HAnchor.Stretch,
-					VAnchor = VAnchor.Fit,
-					Margin = 15,
-					Border = new BorderDouble(bottom: 2),
-					BorderColor = Color.Gray,
-				});
+					VAnchor = VAnchor.Stretch,
+				};
+				systemWindow.AddChild(column);
 
-				heading.AddChild(new TextWidget($"border: {borderSize}, margin: {marginSize}, container: white, widget: blue, border: red", pointSize: 11));
+				int marginSize = 8;
 
-				for (var i = 0; i < 5; i++)
+				GuiWidget heading;
+
+				for (var m = 0; m < 2; m++)
 				{
-					BorderDouble margin = 0;
-					switch (i)
+					column.AddChild(heading = new GuiWidget()
 					{
-						case 0:
-							margin = new BorderDouble(left: marginSize);
-							break;
-						case 1:
-							margin = new BorderDouble(right: marginSize);
-							break;
-						case 2:
-							margin = new BorderDouble(top: marginSize);
-							break;
-						case 3:
-							margin = new BorderDouble(bottom: marginSize);
-							break;
-						case 4:
-							margin = marginSize;
-							break;
+						HAnchor = HAnchor.Stretch,
+						VAnchor = VAnchor.Fit,
+						Margin = 15,
+						Border = new BorderDouble(bottom: 2),
+						BorderColor = Color.Gray,
+					});
+
+					heading.AddChild(new TextWidget($"border: {borderSize}, margin: {marginSize}, container: white, widget: blue, border: red", pointSize: 11));
+
+					for (var i = 0; i < 5; i++)
+					{
+						BorderDouble margin = 0;
+						switch (i)
+						{
+							case 0:
+								margin = new BorderDouble(left: marginSize);
+								break;
+							case 1:
+								margin = new BorderDouble(right: marginSize);
+								break;
+							case 2:
+								margin = new BorderDouble(top: marginSize);
+								break;
+							case 3:
+								margin = new BorderDouble(bottom: marginSize);
+								break;
+							case 4:
+								margin = marginSize;
+								break;
+						}
+
+						var row = new FlowLayoutWidget()
+						{
+							HAnchor = HAnchor.Fit | HAnchor.Center,
+						};
+						column.AddChild(row);
+
+						row.AddChild(
+							GetBorderedWidget(new BorderDouble(bottom: borderSize), "bottom", margin));
+						row.AddChild(new GuiWidget() { Margin = 10 });
+
+						row.AddChild(
+							GetBorderedWidget(new BorderDouble(top: borderSize), "top", margin));
+						row.AddChild(new GuiWidget() { Margin = 10 });
+
+						row.AddChild(
+							GetBorderedWidget(new BorderDouble(right: borderSize), "right", margin));
+						row.AddChild(new GuiWidget() { Margin = 10 });
+
+						row.AddChild(
+							GetBorderedWidget(new BorderDouble(left: borderSize), "left", margin));
+						row.AddChild(new GuiWidget() { Margin = 10 });
+
+						row.AddChild(
+							GetBorderedWidget(new BorderDouble(borderSize), "*", margin));
 					}
 
-					var row = new FlowLayoutWidget()
-					{
-						HAnchor = HAnchor.Fit | HAnchor.Center,
-					};
-					column.AddChild(row);
-
-					row.AddChild(
-						GetBorderedWidget(new BorderDouble(bottom: borderSize), "bottom", margin));
-					row.AddChild(new GuiWidget() { Margin = 10 });
-
-					row.AddChild(
-						GetBorderedWidget(new BorderDouble(top: borderSize), "top", margin));
-					row.AddChild(new GuiWidget() { Margin = 10 });
-
-					row.AddChild(
-						GetBorderedWidget(new BorderDouble(right: borderSize), "right", margin));
-					row.AddChild(new GuiWidget() { Margin = 10 });
-
-					row.AddChild(
-						GetBorderedWidget(new BorderDouble(left: borderSize), "left", margin));
-					row.AddChild(new GuiWidget() { Margin = 10 });
-
-					row.AddChild(
-						GetBorderedWidget(new BorderDouble(borderSize), "*", margin));
+					borderSize = 5;
 				}
 
-				borderSize = 5;
-			}
-
-			systemWindow.Load += (s, e) =>
-			{
-				foreach(var child in systemWindow.Children)
+				systemWindow.Load += (s, e) =>
 				{
-					child.Invalidate();
-				}
-			};
-			systemWindow.ShowAsSystemWindow();
+					foreach(var child in systemWindow.Children)
+					{
+						child.Invalidate();
+					}
+				};
+				systemWindow.ShowAsSystemWindow();
+			}
+			finally
+			{
+				SystemWindow.EnableAllowDrop = originalEnableAllowDrop;
+			}
 		}
 
 		private static IImageByte DrawBorderOnSurface(BorderDouble border, string name)
@@ -232,12 +243,12 @@ namespace MatterHackers.Agg.UI.Tests
 					bool shouldBeRed = borderBounds.Contains(new Point2D(x + .5, y + .5));
 					if (shouldBeRed)
 					{
-						MHAssert.Equal(Color.Red, pixel);
+						Assert.Equal(Color.Red, pixel);
 
 					}
 					else
 					{
-						MHAssert.NotEqual(Color.Red, pixel);
+						Assert.NotEqual(Color.Red, pixel);
 					}
 				}
 			}

@@ -27,12 +27,12 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using Agg.Tests.Agg;
 using MatterHackers.Agg.Image;
+using Xunit;
 
 namespace MatterHackers.Agg.UI.Tests
 {
-    [MhTestFixture("Opens Winforms Window")]
+    [Collection("Opens Winforms Window")]
     public class ScrollableWidgetTests
 	{
 		public static bool saveImagesForDebug = false;
@@ -46,7 +46,7 @@ namespace MatterHackers.Agg.UI.Tests
 			}
 		}
 
-        [HMTest]
+        [Fact]
         public void LimitScrolToContetsTests()
 		{
 			GuiWidget containerControl = new GuiWidget(200, 200);
@@ -61,8 +61,8 @@ namespace MatterHackers.Agg.UI.Tests
 
 			OutputImages(containerControl, containerTest);
 
-			MHAssert.True(containerControl.BackBuffer != null, "When we set a guiWidget to DoubleBuffer it needs to create one.");
-			MHAssert.True(containerControl.BackBuffer == containerTest.BackBuffer, "The Anchored widget should be in the correct place.");
+			Assert.True(containerControl.BackBuffer != null, "When we set a guiWidget to DoubleBuffer it needs to create one.");
+			Assert.True(containerControl.BackBuffer == containerTest.BackBuffer, "The Anchored widget should be in the correct place.");
 		}
 	}
 }

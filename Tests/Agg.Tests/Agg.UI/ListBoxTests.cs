@@ -27,13 +27,13 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using Agg.Tests.Agg;
 using MatterHackers.Agg.Image;
 using MatterHackers.VectorMath;
+using Xunit;
 
 namespace MatterHackers.Agg.UI.Tests
 {
-    [MhTestFixture("Opens Winforms Window")]
+    [Collection("Opens Winforms Window")]
     public class ListBoxTests
 	{
 		public static bool saveImagesForDebug = false;
@@ -60,7 +60,7 @@ namespace MatterHackers.Agg.UI.Tests
 			OutputImage(test, "image-test.tga");
 		}
 
-        [HMTest]
+        [Fact]
         public void SingleItemVisibleTest()
 		{
 			{
@@ -84,7 +84,7 @@ namespace MatterHackers.Agg.UI.Tests
 				double leastSquares;
 				containerListBox.BackBuffer.FindLeastSquaresMatch(textImage, out bestPosition, out leastSquares, maxError);
 
-				MHAssert.True(leastSquares < maxError, "The list box need to be showing the item we added to it.");
+				Assert.True(leastSquares < maxError, "The list box need to be showing the item we added to it.");
 			}
 
 			{
@@ -126,11 +126,11 @@ namespace MatterHackers.Agg.UI.Tests
 				double leastSquares;
 				container.BackBuffer.FindLeastSquaresMatch(textImage, out bestPosition, out leastSquares, maxError);
 
-				MHAssert.True(leastSquares < maxError, "The list box need to be showing the item we added to it.");
+				Assert.True(leastSquares < maxError, "The list box need to be showing the item we added to it.");
 			}
 		}
 
-        [HMTest]
+        [Fact]
         public void ScrollPositionStartsCorrect()
 		{
 			GuiWidget contents = new GuiWidget(300, 300);
@@ -147,7 +147,7 @@ namespace MatterHackers.Agg.UI.Tests
 
 			contents.OnDraw(contents.NewGraphics2D());
 
-			MHAssert.True(container.TopLeftOffset.Y == 0);
+			Assert.True(container.TopLeftOffset.Y == 0);
 		}
 
 		private static void AddContents(GuiWidget widgetToAddItemsTo)
