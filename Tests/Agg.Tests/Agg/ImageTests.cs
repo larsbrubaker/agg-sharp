@@ -1,10 +1,10 @@
-﻿using Agg.Tests.Agg;
-using MatterHackers.VectorMath;
+﻿using MatterHackers.VectorMath;
 using System;
+using Xunit;
 
 namespace MatterHackers.Agg.Image
 {
-	[TestFixture("Agg.Image")]
+	[Collection("Agg.Image")]
 	public class ImageTests
 	{
 		private bool ClearAndCheckImage(ImageBuffer image, Color color)
@@ -52,8 +52,8 @@ namespace MatterHackers.Agg.Image
 			return true;
 		}
 
-		[Test]
-		public void ColorHTMLTranslations()
+        [Fact]
+        public void ColorHTMLTranslations()
 		{
 			Assert.Equal(new Color("#FFFFFFFF"), new Color(255, 255, 255, 255));
 			Assert.Equal(new Color("#FFF"), new Color(255, 255, 255, 255));
@@ -68,8 +68,8 @@ namespace MatterHackers.Agg.Image
 			Assert.Equal(new Color("#A1FFFF"), new Color(161, 255, 255, 255));
 		}
 
-		[Test]
-		public void ClearTests()
+        [Fact]
+        public void ClearTests()
 		{
 			ImageBuffer clearSurface24 = new ImageBuffer(50, 50, 24, new BlenderBGR());
 			Assert.True(ClearAndCheckImage(clearSurface24, Color.White), "Clear 24 to white");

@@ -32,10 +32,10 @@ using MatterHackers.Agg.Transform;
 
 namespace MatterHackers.Agg.Tests
 {
-	[TestFixture]
+	[MhTestFixture]
     public class AffineTests
 	{
-		[Test]
+		[HMTest]
 		public void invert_test()
 		{
 			Affine a = Affine.NewIdentity();
@@ -50,11 +50,11 @@ namespace MatterHackers.Agg.Tests
 
 			a.Transform(ref newx, ref newy);
 			b.Transform(ref newx, ref newy);
-			Assert.Equal(x, newx, .001);
-			Assert.Equal(y, newy, .001);
+			MHAssert.Equal(x, newx, .001);
+			MHAssert.Equal(y, newy, .001);
 		}
 
-		[Test]
+		[HMTest]
 		public void transform_test()
 		{
 			Affine a = Affine.NewIdentity();
@@ -66,8 +66,8 @@ namespace MatterHackers.Agg.Tests
 			double newy = 0;
 
 			a.Transform(ref newx, ref newy);
-			Assert.Equal(x, newx, .001);
-			Assert.Equal(y, newy, .001);
+			MHAssert.Equal(x, newx, .001);
+			MHAssert.Equal(y, newy, .001);
 		}
 	}
 }

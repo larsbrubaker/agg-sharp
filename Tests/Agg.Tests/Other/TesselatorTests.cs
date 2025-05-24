@@ -35,7 +35,7 @@ using Tesselate;
 
 namespace MatterHackers.Agg.Tests
 {
-    [TestFixture]
+    [MhTestFixture]
     public class TesselatorTests
 	{
 		public static string[][] InsructionStream = new string[][]
@@ -411,19 +411,19 @@ namespace MatterHackers.Agg.Tests
 
 		public void BeginCallBack(Tesselator.TriangleListType type)
 		{
-			Assert.True(GetNextOutputAsString() == "B");
+			MHAssert.True(GetNextOutputAsString() == "B");
 			switch (type)
 			{
 				case Tesselator.TriangleListType.Triangles:
-					Assert.True(GetNextOutputAsString() == "TRI");
+					MHAssert.True(GetNextOutputAsString() == "TRI");
 					break;
 
 				case Tesselator.TriangleListType.TriangleFan:
-					Assert.True(GetNextOutputAsString() == "FAN");
+					MHAssert.True(GetNextOutputAsString() == "FAN");
 					break;
 
 				case Tesselator.TriangleListType.TriangleStrip:
-					Assert.True(GetNextOutputAsString() == "STRIP");
+					MHAssert.True(GetNextOutputAsString() == "STRIP");
 					break;
 
 				default:
@@ -434,17 +434,17 @@ namespace MatterHackers.Agg.Tests
 		public int CombineCallBack(double[] coords3, int[] data4, double[] weight4)
 		{
 			double error = .001;
-			Assert.True(GetNextOutputAsString() == "C");
-			Assert.Equal(GetNextOutputAsDouble(), coords3[0], error);
-			Assert.Equal(GetNextOutputAsDouble(), coords3[1], error);
-			Assert.Equal(GetNextOutputAsInt(), data4[0]);
-			Assert.Equal(GetNextOutputAsInt(), data4[1]);
-			Assert.Equal(GetNextOutputAsInt(), data4[2]);
-			Assert.Equal(GetNextOutputAsInt(), data4[3]);
-			Assert.Equal(GetNextOutputAsDouble(), weight4[0], error);
-			Assert.Equal(GetNextOutputAsDouble(), weight4[1], error);
-			Assert.Equal(GetNextOutputAsDouble(), weight4[2], error);
-			Assert.Equal(GetNextOutputAsDouble(), weight4[3], error);
+			MHAssert.True(GetNextOutputAsString() == "C");
+			MHAssert.Equal(GetNextOutputAsDouble(), coords3[0], error);
+			MHAssert.Equal(GetNextOutputAsDouble(), coords3[1], error);
+			MHAssert.Equal(GetNextOutputAsInt(), data4[0]);
+			MHAssert.Equal(GetNextOutputAsInt(), data4[1]);
+			MHAssert.Equal(GetNextOutputAsInt(), data4[2]);
+			MHAssert.Equal(GetNextOutputAsInt(), data4[3]);
+			MHAssert.Equal(GetNextOutputAsDouble(), weight4[0], error);
+			MHAssert.Equal(GetNextOutputAsDouble(), weight4[1], error);
+			MHAssert.Equal(GetNextOutputAsDouble(), weight4[2], error);
+			MHAssert.Equal(GetNextOutputAsDouble(), weight4[3], error);
 
 			VertexList.Add(new Vertex(coords3[0], coords3[1]));
 			return VertexList.Count-1;
@@ -452,16 +452,16 @@ namespace MatterHackers.Agg.Tests
 
 		public void EdgeFlagCallBack(bool IsEdge)
 		{
-			Assert.True(GetNextOutputAsString() == "F");
-			Assert.Equal(GetNextOutputAsBool(), IsEdge);
+			MHAssert.True(GetNextOutputAsString() == "F");
+			MHAssert.Equal(GetNextOutputAsBool(), IsEdge);
 		}
 
 		public void EndCallBack()
 		{
-			Assert.True(GetNextOutputAsString() == "E");
+			MHAssert.True(GetNextOutputAsString() == "E");
 		}
 
-		[Test]
+		[HMTest]
 		public void MatchesGLUTesselator()
 		{
 			for (CurrentInputTest = 0; CurrentInputTest < InsructionStream.Length; CurrentInputTest++)
@@ -535,8 +535,8 @@ namespace MatterHackers.Agg.Tests
 
 		public void VertexCallBack(int index)
 		{
-			Assert.True(GetNextOutputAsString() == "V");
-			Assert.Equal(GetNextOutputAsInt(), index);
+			MHAssert.True(GetNextOutputAsString() == "V");
+			MHAssert.Equal(GetNextOutputAsInt(), index);
 		}
 
 		private bool GetNextOutputAsBool()
@@ -547,7 +547,7 @@ namespace MatterHackers.Agg.Tests
 				return true;
 			}
 
-			Assert.Equal(asDouble, 0);
+			MHAssert.Equal(asDouble, 0);
 
 			return false;
 		}
@@ -560,7 +560,7 @@ namespace MatterHackers.Agg.Tests
 		private int GetNextOutputAsInt()
 		{
 			double asDouble = Convert.ToDouble(GetNextOutputAsString());
-			Assert.Equal((int)asDouble, asDouble);
+			MHAssert.Equal((int)asDouble, asDouble);
 			return (int)asDouble;
 		}
 

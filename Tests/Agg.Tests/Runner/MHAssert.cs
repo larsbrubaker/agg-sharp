@@ -36,7 +36,7 @@ using MatterHackers.PolygonMesh;
 
 namespace Agg.Tests.Agg
 {
-    public class Assert
+    public class MHAssert
     {
         public static void Equal(int expected, int actual)
         {

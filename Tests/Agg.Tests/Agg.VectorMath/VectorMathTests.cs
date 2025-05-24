@@ -27,16 +27,16 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-using Agg.Tests.Agg;
 using Newtonsoft.Json;
+using Xunit;
 using System;
 
 namespace MatterHackers.VectorMath.Tests
 {
-    [TestFixture("Agg.VectorMath")]
+    [Collection("Agg.VectorMath")]
     public class EasingTests
 	{
-		[Test]
+		[Fact]
 		public void StaticFunctionTests()
 		{
 			void InverseWorking(Easing.EaseType easeType, Easing.EaseOption easeOption, double k)
@@ -64,10 +64,10 @@ namespace MatterHackers.VectorMath.Tests
 		}
 	}
 
-	[TestFixture("Agg.VectorMath")]
+	[Collection("Agg.VectorMath")]
 	public class Vector2Tests
 	{
-		[Test]
+		[Fact]
 		public void GetDeltaAngleTests()
 		{
 			// angles around 0
@@ -95,7 +95,7 @@ namespace MatterHackers.VectorMath.Tests
 			}
 		}
 
-		[Test]
+		[Fact]
 		public void DistanceToLineTests()
 		{
 			// outside the line
@@ -113,17 +113,17 @@ namespace MatterHackers.VectorMath.Tests
 		}
 	}
 
-	[TestFixture("Agg.VectorMath")]
+	[Collection("Agg.VectorMath")]
 	public class Vector3Tests
 	{
-		[Test]
+		[Fact]
 		public void StaticFunctionTests()
 		{
 			Assert.True(Vector3.Collinear(new Vector3(0, 0, 1), new Vector3(0, 0, 2), new Vector3(0, 0, 3)));
 			Assert.True(!Vector3.Collinear(new Vector3(0, 0, 1), new Vector3(0, 0, 2), new Vector3(0, 1, 3)));
 		}
 
-		[Test]
+		[Fact]
 		public void Vector3ParseTest()
 		{
 			// Two segments
@@ -162,7 +162,7 @@ namespace MatterHackers.VectorMath.Tests
 				Vector3.Parse(""));
 		}
 
-		[Test]
+		[Fact]
 		public void Vector2SerializeTest()
 		{
 			Assert.Equal(
@@ -170,7 +170,7 @@ namespace MatterHackers.VectorMath.Tests
 				JsonConvert.SerializeObject(new Vector2(1, 2))); //, "Unexpected properties serialized into json output");
         }
 
-		[Test]
+		[Fact]
 		public void Vector2FloatSerializeTest()
 		{
 			Assert.Equal(
@@ -178,7 +178,7 @@ namespace MatterHackers.VectorMath.Tests
 				JsonConvert.SerializeObject(new Vector2Float(1.1, 2.2))); //, "Unexpected properties serialized into json output");
         }
 
-		[Test]
+		[Fact]
 		public void Vector3FloatSerializeTest()
 		{
 			Assert.Equal(
@@ -186,7 +186,7 @@ namespace MatterHackers.VectorMath.Tests
 				JsonConvert.SerializeObject(new Vector3Float(1.1, 2.2, 3.3))); //, "Unexpected properties serialized into json output");
         }
 
-		[Test]
+		[Fact]
 		public void Vector3SerializeTest()
 		{
 			Assert.Equal(
@@ -194,7 +194,7 @@ namespace MatterHackers.VectorMath.Tests
 				JsonConvert.SerializeObject(new Vector3(1, 2, 3))); //, "Unexpected properties serialized into json output");
         }
 
-		[Test]
+		[Fact]
 		public void WorldViewPerspectiveProjectionTests()
 		{
 			var world = new WorldView(1, 1);
@@ -212,7 +212,7 @@ namespace MatterHackers.VectorMath.Tests
 			Assert.Equal(world.NearPlaneHeightInViewspace * 2 / 3, world.GetWorldUnitsPerScreenPixelAtPosition(new Vector3(1, 1, (7 - 10) / 3.0)) * 123, 1e-3);
 		}
 
-		[Test]
+		[Fact]
 		public void WorldViewOrthographicProjectionTests()
 		{
 			var world = new WorldView(1, 1);
@@ -232,16 +232,16 @@ namespace MatterHackers.VectorMath.Tests
 			Assert.Equal(world.NearPlaneHeightInViewspace / 3, world.GetWorldUnitsPerScreenPixelAtPosition(new Vector3(1, 1, (7 - 10) / 3.0)) * 240, 1e-3);
 		}
 
-		[Test]
-		public void WorldViewEyePositionTests()
+        [Fact]
+        public void WorldViewEyePositionTests()
 		{
 			var world = new WorldView(1, 1);
 			world.EyePosition = new Vector3(1, 2, 3);
 			Assert.True(new Vector3(1, 2, 3).Equals(world.EyePosition, 1e-3));
 		}
 
-		[Test]
-		public void FrustumExtractionTests()
+        [Fact]
+        public void FrustumExtractionTests()
 		{
 			{
 				Matrix4X4 perspectiveMatrix = Matrix4X4.CreatePerspectiveFieldOfView(MathHelper.Tau / 4, 1, 3, 507);
@@ -279,8 +279,8 @@ namespace MatterHackers.VectorMath.Tests
 			}
 		}
 
-		[Test]
-		public void FrustumIntersetAABBTests()
+        [Fact]
+        public void FrustumIntersetAABBTests()
 		{
 			{
 				// A box this is 40 units on each side centered at the origin
@@ -391,8 +391,8 @@ namespace MatterHackers.VectorMath.Tests
 			}
 		}
 
-		[Test]
-		public void FrustumTransformTests()
+        [Fact]
+        public void FrustumTransformTests()
 		{
 			{
 				Frustum frustum = new Frustum(
@@ -496,8 +496,8 @@ namespace MatterHackers.VectorMath.Tests
 			}
 		}
 
-		[Test]
-		public void PlaneClipLineTests()
+        [Fact]
+        public void PlaneClipLineTests()
 		{
 			{
 				Plane testPlane = new Plane(Vector3.UnitZ, 5);
@@ -538,8 +538,8 @@ namespace MatterHackers.VectorMath.Tests
 			}
 		}
 
-		[Test]
-		public void TestGetHashCode()
+        [Fact]
+        public void TestGetHashCode()
 		{
 			{
 				Vector2 a = new Vector2(10, 11);
