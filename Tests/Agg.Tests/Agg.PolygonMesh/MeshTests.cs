@@ -151,41 +151,32 @@ namespace MatterHackers.PolygonMesh.UnitTests
             // If the advance is on the 0 (outside) polygon, create [outside prev, outside new, inside]
             // If the advance is on the 1 (inside) polygon, creat [outside, inside new, inside prev]
 
-            // head, move, created polygon
-            // [1,1] 0, starting points 0-1, 1-3 (outside to inside)
-            // [1,0] 1,    [0-1, 1-0, 1-1] 
-            // [2,0] 0,    [0-1, 0-2, 1-0] - [0-1, 1-0, 1-3] polygon crosses a line [1-0, 1-3]
-            // [2,3] 1,    [0-2, 1-3, 1-0]
-            // [0,3] 0,    [0-2, 0-0, 1-0]
-            // [0,2] 1,    [0-0, 1-2, 1-3]
-            // [1,2] 0,    [0-0, 0-1, 1-2]
-            // [1,1] 1,    [0-1, 1-1, 1-2]
-            // back to start, done
+            var outerLoop = PolygonsExtensions.CreateFromString("x:1000, y:0,x:0, y:1000,x:-1000, y:0,|")[0];
+            var innerLoop = PolygonsExtensions.CreateFromString("x:400, y:500,x:0, y:750,x:-400, y:500,x:0, y:250,|")[0];
 
-            var outerLoop = PolygonsExtensions.CreateFromString("x:1000, y:0,x:0, y:1000,x:-1000, y:0,|");
-            var innerLoop = PolygonsExtensions.CreateFromString("x:4000, y:500,x:0, y:750,x:-400, y:500,x:0, y:250,|");
-
-			var (outerStart, innerStart) = PathStitcher.BestStartIndices(outerLoop[0], innerLoop[0]);
+			var (outerStart, innerStart) = PathStitcher.BestStartIndices(outerLoop, innerLoop);
 
 			Assert.Equal(1, outerStart);
 			Assert.Equal(1, innerStart);
 
 			var expected = new List<(int outerIndex, int innerIndex, int polyIndex)>()
 			{
-				(1,1,1), // the point on outer, the point on inner, the polygon to advance on
-				(1,2,0),
-				(2,2,1),
-				(2,3,0),
-				(0,3,0),
-				(0,0,0),
-				(1,0,1),
+				// point on 0, point on 1, polygon to index
+				(1,1,1), // advancing 0 creates a longer move and niether intersect
+				(1,2,0), // 1, 2, 1 causes an intersection
+				(2,2,1), // it is shorter
+				(2,3,0), // 2, 3, 1 causes an intersection
+				(0,3,1), // 0, 3, 0 causes an intersection
+				(0,0,0), // 0, 0, 1 causes an intersection
+				(1,0,1), // and we are back to the start
 			};
+
 			for (var i = 0; i < expected.Count; i++)
 			{
 				var data = expected[i];
-				var actualResult = PathStitcher.GetPolygonToAdvance(outerLoop[0], data.outerIndex, innerLoop[0], data.innerIndex);
+				var actualResult = PathStitcher.GetPolygonToAdvance(outerLoop, data.outerIndex, innerLoop, data.innerIndex);
 				
-                Assert.Equal(data.polyIndex, actualResult);//, "Validate Advance");
+                Assert.True(data.polyIndex == actualResult, $"i={i}, Expected {data.polyIndex} but got {actualResult}");
             }
         }
 
