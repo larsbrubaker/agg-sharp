@@ -50,6 +50,7 @@ namespace MatterHackers.RenderOpenGl
 		private IDXGISwapChain swapChain;
 		private ID3D11RenderTargetView renderTargetView;
 		private ID3D11Texture2D currentBackBuffer;
+		private ID3D11Texture2D msaaRenderTarget;
 		private ID3D11DepthStencilView depthStencilView;
 		private ID3D11Texture2D depthStencilBuffer;
 
@@ -248,8 +249,18 @@ namespace MatterHackers.RenderOpenGl
 		{
 			currentBackBuffer?.Dispose();
 			currentBackBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
-			renderTargetView = device.CreateRenderTargetView(currentBackBuffer);
 			renderTargetHeight = (int)currentBackBuffer.Description.Height;
+
+			int sampleCount = 4; // Use 4x MSAA
+
+			msaaRenderTarget?.Dispose();
+			var msaaDesc = currentBackBuffer.Description;
+			msaaDesc.SampleDescription = new SampleDescription((uint)sampleCount, 0);
+			msaaDesc.BindFlags = BindFlags.RenderTarget;
+			msaaRenderTarget = device.CreateTexture2D(msaaDesc);
+
+			renderTargetView?.Dispose();
+			renderTargetView = device.CreateRenderTargetView(msaaRenderTarget);
 
 			var depthDesc = new Texture2DDescription
 			{
@@ -258,7 +269,7 @@ namespace MatterHackers.RenderOpenGl
 				MipLevels = 1,
 				ArraySize = 1,
 				Format = Format.D24_UNorm_S8_UInt,
-				SampleDescription = new SampleDescription(1, 0),
+				SampleDescription = new SampleDescription((uint)sampleCount, 0),
 				Usage = ResourceUsage.Default,
 				BindFlags = BindFlags.DepthStencil,
 			};
@@ -275,8 +286,11 @@ namespace MatterHackers.RenderOpenGl
 
 			context.OMSetRenderTargets((ID3D11RenderTargetView)null, (ID3D11DepthStencilView)null);
 			renderTargetView?.Dispose();
+			renderTargetView = null;
 			currentBackBuffer?.Dispose();
 			currentBackBuffer = null;
+			msaaRenderTarget?.Dispose();
+			msaaRenderTarget = null;
 			depthStencilView?.Dispose();
 			depthStencilBuffer?.Dispose();
 
@@ -492,6 +506,14 @@ namespace MatterHackers.RenderOpenGl
 
 		private void UpdateLightBuffer(bool light0On, bool light1On)
 		{
+			// Transform light position into view space for the shader if needed?
+			// The shaders (posColorLit and posTexLit) receive the normal in object space.
+			// Wait, if the normal is in object space, we need the light direction in object space too!
+			// OpenGL lighting is calculated in EYE space (view space). The shader does:
+			// "normal = normalize(mul(input.normal, (float3x3)WorldView));"
+			// "float nDotL = max(0.0, dot(normal, lightDir));"
+			// But wait, our HLSL shaders don't have the normal transformation logic! Let's check the shaders.
+
 			var mapped = context.Map(lightBuffer, MapMode.WriteDiscard);
 			unsafe
 			{
@@ -1014,13 +1036,43 @@ namespace MatterHackers.RenderOpenGl
 			// Simple Lambert lighting on CPU
 			float lr = 0, lg = 0, lb = 0;
 
+			// We need the inverse transpose of the ModelView matrix to transform normals correctly.
+			// However, since we're transforming a normal into view space, and the ModelView matrix is usually just rotation/translation
+			// we can use the 3x3 portion of the ModelView matrix to transform the normal.
+			var mv = modelViewStack.Peek();
+			
+			// Transform normal to view space (M * v) where M's columns are stored in Row0, Row1, etc.
+			float vnx = (float)(nx * mv.Row0.X + ny * mv.Row1.X + nz * mv.Row2.X);
+			float vny = (float)(nx * mv.Row0.Y + ny * mv.Row1.Y + nz * mv.Row2.Y);
+			float vnz = (float)(nx * mv.Row0.Z + ny * mv.Row1.Z + nz * mv.Row2.Z);
+
+			// Normalize the view-space normal
+			float nlen = (float)Math.Sqrt(vnx * vnx + vny * vny + vnz * vnz);
+			if (nlen > 0)
+			{
+				vnx /= nlen;
+				vny /= nlen;
+				vnz /= nlen;
+			}
+			else
+			{
+				vnx = nx;
+				vny = ny;
+				vnz = nz;
+			}
+
 			void AddLight(LightData light)
 			{
-				float dx = light.Position[0], dy = light.Position[1], dz = light.Position[2];
+				// Light position is already in view space (stored when glLightfv was called)
+				float dx = light.Position[0];
+				float dy = light.Position[1];
+				float dz = light.Position[2];
+
+				// If w=0, it's a directional light
 				float len = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
 				if (len > 0) { dx /= len; dy /= len; dz /= len; }
 
-				float ndotl = nx * dx + ny * dy + nz * dz;
+				float ndotl = vnx * dx + vny * dy + vnz * dz;
 				if (ndotl < 0) ndotl = 0;
 
 				lr += light.Ambient[0] + light.Diffuse[0] * ndotl;
@@ -1031,6 +1083,13 @@ namespace MatterHackers.RenderOpenGl
 			if (light0On) AddLight(lights[0]);
 			if (light1On) AddLight(lights[1]);
 
+			// Add global ambient? OpenGl defaults to a global ambient of (0.2, 0.2, 0.2, 1.0)
+			lr += 0.2f;
+			lg += 0.2f;
+			lb += 0.2f;
+
+			// If both lights are off, maybe we should just return? Wait, if lighting is on but no lights are on, it should just be ambient.
+			
 			r = Math.Min(1.0f, r * lr);
 			g = Math.Min(1.0f, g * lg);
 			b = Math.Min(1.0f, b * lb);
@@ -1733,6 +1792,8 @@ namespace MatterHackers.RenderOpenGl
 					float py = param.Length > 1 ? param[1] : 0;
 					float pz = param.Length > 2 ? param[2] : 0;
 					float pw = param.Length > 3 ? param[3] : 0;
+					
+					// M * v where M's columns are stored in Row0, Row1, etc.
 					lights[idx].Position[0] = (float)(px * mv.Row0.X + py * mv.Row1.X + pz * mv.Row2.X + pw * mv.Row3.X);
 					lights[idx].Position[1] = (float)(px * mv.Row0.Y + py * mv.Row1.Y + pz * mv.Row2.Y + pw * mv.Row3.Y);
 					lights[idx].Position[2] = (float)(px * mv.Row0.Z + py * mv.Row1.Z + pz * mv.Row2.Z + pw * mv.Row3.Z);
@@ -2708,16 +2769,17 @@ namespace MatterHackers.RenderOpenGl
 
 		public void Present()
 		{
+			if (msaaRenderTarget != null && currentBackBuffer != null)
+			{
+				context.ResolveSubresource(currentBackBuffer, 0, msaaRenderTarget, 0, currentBackBuffer.Description.Format);
+			}
+
 			swapChain.Present(0, PresentFlags.None);
 
 			// With FlipDiscard, the back buffer changes after Present.
-			// Re-acquire the render target view for the new back buffer.
-			// Keep a strong reference to the back buffer texture to prevent
-			// the RTV from pointing to a released resource.
-			renderTargetView?.Dispose();
 			currentBackBuffer?.Dispose();
 			currentBackBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
-			renderTargetView = device.CreateRenderTargetView(currentBackBuffer);
+			// Do not recreate renderTargetView because it points to msaaRenderTarget, which is stable!
 			context.OMSetRenderTargets(renderTargetView, depthStencilView);
 		}
 
@@ -2729,6 +2791,8 @@ namespace MatterHackers.RenderOpenGl
 				tex.ShaderResourceView?.Dispose();
 				tex.Texture?.Dispose();
 			}
+
+			msaaRenderTarget?.Dispose();
 
 			foreach (var prog in shaderPrograms.Values) prog?.Dispose();
 			shaderPrograms.Clear();

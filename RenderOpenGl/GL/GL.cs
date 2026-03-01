@@ -1,5 +1,5 @@
-﻿/*
-Copyright (c) 2018, Lars Brubaker
+/*
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -98,7 +98,7 @@ namespace MatterHackers.RenderOpenGl.OpenGl
 
                 if (Thread.CurrentThread.ManagedThreadId != threadId)
                 {
-                    throw new Exception("You mush only cal GL on the main thread.");
+                    throw new Exception("You must only call GL on the main thread.");
                 }
 
                 CheckForError();
@@ -108,6 +108,7 @@ namespace MatterHackers.RenderOpenGl.OpenGl
             set
             {
                 _instance = value;
+                threadId = Thread.CurrentThread.ManagedThreadId;
             }
         }
 

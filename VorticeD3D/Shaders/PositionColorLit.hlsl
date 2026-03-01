@@ -35,20 +35,20 @@ PS_INPUT VS(VS_INPUT input)
     output.Position = mul(worldPos, Projection);
     output.Position.z = (output.Position.z + output.Position.w) * 0.5;
 
-    float3 n = normalize(input.Normal);
-    float3 litColor = float3(0, 0, 0);
+    float3 viewNormal = normalize(mul(input.Normal, (float3x3)ModelView));
+    float3 litColor = float3(0.2, 0.2, 0.2); // Global ambient
 
     if (LightFlags.x > 0.5)
     {
         float3 lightDir = normalize(Light0Position.xyz);
-        float ndotl = max(0, dot(n, lightDir));
+        float ndotl = max(0, dot(viewNormal, lightDir));
         litColor += Light0Ambient.rgb + Light0Diffuse.rgb * ndotl;
     }
 
     if (LightFlags.y > 0.5)
     {
         float3 lightDir = normalize(Light1Position.xyz);
-        float ndotl = max(0, dot(n, lightDir));
+        float ndotl = max(0, dot(viewNormal, lightDir));
         litColor += Light1Ambient.rgb + Light1Diffuse.rgb * ndotl;
     }
 
