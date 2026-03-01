@@ -56,22 +56,28 @@ namespace MatterHackers.RenderOpenGl
 		// Shaders for position+color rendering
 		private ID3D11VertexShader posColorVS;
 		private ID3D11PixelShader posColorPS;
+		private ID3D11PixelShader posColorFlatPS;
 		private ID3D11InputLayout posColorInputLayout;
 
 		// Shaders for position+texture rendering
 		private ID3D11VertexShader posTexVS;
 		private ID3D11PixelShader posTexPS;
+		private ID3D11PixelShader posTexFlatPS;
 		private ID3D11InputLayout posTexInputLayout;
 
 		// Shaders for lit position+color rendering (lighting computed on GPU)
 		private ID3D11VertexShader posColorLitVS;
 		private ID3D11PixelShader posColorLitPS;
+		private ID3D11PixelShader posColorLitFlatPS;
 		private ID3D11InputLayout posColorLitInputLayout;
 
 		// Shaders for lit position+texture rendering (lighting computed on GPU)
 		private ID3D11VertexShader posTexLitVS;
 		private ID3D11PixelShader posTexLitPS;
+		private ID3D11PixelShader posTexLitFlatPS;
 		private ID3D11InputLayout posTexLitInputLayout;
+
+		private bool flatShading = false;
 
 		// Constant buffers
 		private ID3D11Buffer transformBuffer;
@@ -82,9 +88,9 @@ namespace MatterHackers.RenderOpenGl
 		private ID3D11Buffer dynamicTexVertexBuffer;
 		private const int MaxVertices = 65536;
 
-		// Blend states
-		private ID3D11BlendState blendStateEnabled;
-		private ID3D11BlendState blendStateDisabled;
+		// Blend state cache
+		private Dictionary<(bool blend, int src, int dst, ColorWriteEnable mask), ID3D11BlendState> blendStateCache = new Dictionary<(bool, int, int, ColorWriteEnable), ID3D11BlendState>();
+		private ColorWriteEnable currentColorWriteMask = ColorWriteEnable.All;
 
 		// Depth stencil state cache
 		private Dictionary<(bool enabled, ComparisonFunction func, bool writeMask), ID3D11DepthStencilState> depthStencilCache
@@ -163,8 +169,26 @@ namespace MatterHackers.RenderOpenGl
 		// Texture management
 		private int nextTextureId = 1;
 		private Dictionary<int, TextureInfo> textures = new Dictionary<int, TextureInfo>();
-		private int currentBoundTexture = 0;
+		private int activeTextureUnit = 0;
+		private int[] boundTextures = new int[8];
 		private bool texture2DEnabled = false;
+
+		private void BindActiveTextures()
+		{
+			for (int i = 0; i < boundTextures.Length; i++)
+			{
+				int tex = boundTextures[i];
+				if (tex > 0 && textures.TryGetValue(tex, out var texInfo) && texInfo.ShaderResourceView != null)
+				{
+					context.PSSetShaderResource((uint)i, texInfo.ShaderResourceView);
+					context.PSSetSampler((uint)i, texInfo.Sampler ?? defaultSampler);
+				}
+				else
+				{
+					context.PSSetShaderResource((uint)i, null);
+				}
+			}
+		}
 
 		// Shader program management (for user-created shaders)
 		private int nextProgramId = 1;
@@ -181,6 +205,14 @@ namespace MatterHackers.RenderOpenGl
 
 		// Framebuffer management
 		private int nextFramebufferId = 1;
+		private class FramebufferInfo
+		{
+			public int TextureId;
+			public ID3D11RenderTargetView RenderTargetView;
+			public ID3D11DepthStencilView DepthStencilView;
+		}
+		private Dictionary<int, FramebufferInfo> framebuffers = new Dictionary<int, FramebufferInfo>();
+		private int currentBoundFramebuffer = 0;
 
 		// VAO management
 		private int nextVaoId = 1;
@@ -190,6 +222,7 @@ namespace MatterHackers.RenderOpenGl
 
 		// Viewport
 		private int viewportX, viewportY, viewportWidth, viewportHeight;
+		private int scissorX, scissorY, scissorWidth, scissorHeight;
 
 		public bool GlHasBufferObjects => true;
 
@@ -260,8 +293,12 @@ namespace MatterHackers.RenderOpenGl
 				byte[] vsByteCode = Compiler.Compile(hlsl, "VS", "PositionColor.hlsl", "vs_5_0").ToArray();
 				byte[] psByteCode = Compiler.Compile(hlsl, "PS", "PositionColor.hlsl", "ps_5_0").ToArray();
 
+				string hlslFlat = hlsl.Replace("float4 Color : COLOR;", "nointerpolation float4 Color : COLOR;");
+				byte[] psFlatByteCode = Compiler.Compile(hlslFlat, "PS", "PositionColor.hlsl", "ps_5_0").ToArray();
+
 				posColorVS = device.CreateVertexShader(vsByteCode);
 				posColorPS = device.CreatePixelShader(psByteCode);
+				posColorFlatPS = device.CreatePixelShader(psFlatByteCode);
 
 				var inputElements = new[]
 				{
@@ -278,8 +315,12 @@ namespace MatterHackers.RenderOpenGl
 				byte[] vsByteCode = Compiler.Compile(hlsl, "VS", "PositionTexture.hlsl", "vs_5_0").ToArray();
 				byte[] psByteCode = Compiler.Compile(hlsl, "PS", "PositionTexture.hlsl", "ps_5_0").ToArray();
 
+				string hlslFlat = hlsl.Replace("float4 Color : COLOR;", "nointerpolation float4 Color : COLOR;");
+				byte[] psFlatByteCode = Compiler.Compile(hlslFlat, "PS", "PositionTexture.hlsl", "ps_5_0").ToArray();
+
 				posTexVS = device.CreateVertexShader(vsByteCode);
 				posTexPS = device.CreatePixelShader(psByteCode);
+				posTexFlatPS = device.CreatePixelShader(psFlatByteCode);
 
 				var inputElements = new[]
 				{
@@ -297,8 +338,12 @@ namespace MatterHackers.RenderOpenGl
 				byte[] vsByteCode = Compiler.Compile(hlsl, "VS", "PositionColorLit.hlsl", "vs_5_0").ToArray();
 				byte[] psByteCode = Compiler.Compile(hlsl, "PS", "PositionColorLit.hlsl", "ps_5_0").ToArray();
 
+				string hlslFlat = hlsl.Replace("float4 Color : COLOR;", "nointerpolation float4 Color : COLOR;");
+				byte[] psFlatByteCode = Compiler.Compile(hlslFlat, "PS", "PositionColorLit.hlsl", "ps_5_0").ToArray();
+
 				posColorLitVS = device.CreateVertexShader(vsByteCode);
 				posColorLitPS = device.CreatePixelShader(psByteCode);
+				posColorLitFlatPS = device.CreatePixelShader(psFlatByteCode);
 
 				var inputElements = new[]
 				{
@@ -316,8 +361,12 @@ namespace MatterHackers.RenderOpenGl
 				byte[] vsByteCode = Compiler.Compile(hlsl, "VS", "PositionTextureLit.hlsl", "vs_5_0").ToArray();
 				byte[] psByteCode = Compiler.Compile(hlsl, "PS", "PositionTextureLit.hlsl", "ps_5_0").ToArray();
 
+				string hlslFlat = hlsl.Replace("float4 Color : COLOR;", "nointerpolation float4 Color : COLOR;");
+				byte[] psFlatByteCode = Compiler.Compile(hlslFlat, "PS", "PositionTextureLit.hlsl", "ps_5_0").ToArray();
+
 				posTexLitVS = device.CreateVertexShader(vsByteCode);
 				posTexLitPS = device.CreatePixelShader(psByteCode);
+				posTexLitFlatPS = device.CreatePixelShader(psFlatByteCode);
 
 				var inputElements = new[]
 				{
@@ -333,25 +382,7 @@ namespace MatterHackers.RenderOpenGl
 
 		private void CreateStates()
 		{
-			// Blend states
-			{
-				var desc = new BlendDescription();
-				desc.RenderTarget[0] = new RenderTargetBlendDescription
-				{
-					BlendEnable = true,
-					SourceBlend = Blend.SourceAlpha,
-					DestinationBlend = Blend.InverseSourceAlpha,
-					BlendOperation = BlendOperation.Add,
-					SourceBlendAlpha = Blend.One,
-					DestinationBlendAlpha = Blend.InverseSourceAlpha,
-					BlendOperationAlpha = BlendOperation.Add,
-					RenderTargetWriteMask = ColorWriteEnable.All,
-				};
-				blendStateEnabled = device.CreateBlendState(desc);
-
-				desc.RenderTarget[0].BlendEnable = false;
-				blendStateDisabled = device.CreateBlendState(desc);
-			}
+			// Blend states are created on demand via GetOrCreateBlendState
 
 			// Depth stencil states are created on demand via GetOrCreateDepthStencilState
 
@@ -409,7 +440,7 @@ namespace MatterHackers.RenderOpenGl
 			// Set initial states
 			context.RSSetState(rasterizerNoCull);
 			context.OMSetDepthStencilState(GetOrCreateDepthStencilState(false, ComparisonFunction.Less, true));
-			context.OMSetBlendState(blendStateDisabled);
+			context.OMSetBlendState(GetOrCreateBlendState(false, blendSrcFactor, blendDstFactor, currentColorWriteMask));
 		}
 
 		private void CreateDynamicVertexBuffer()
@@ -500,11 +531,14 @@ namespace MatterHackers.RenderOpenGl
 			var mv = modelViewStack.Peek();
 			// Apply Z correction: map OpenGL clip-space Z [-1,1] to D3D11 [0,1]
 			var p = projectionStack.Peek();
+			
+			double flipY = (currentBoundFramebuffer != 0) ? -1.0 : 1.0;
+
 			var proj = new Matrix4X4(
-				new Vector4(p.Row0.X, p.Row0.Y, p.Row0.Z * 0.5 + p.Row0.W * 0.5, p.Row0.W),
-				new Vector4(p.Row1.X, p.Row1.Y, p.Row1.Z * 0.5 + p.Row1.W * 0.5, p.Row1.W),
-				new Vector4(p.Row2.X, p.Row2.Y, p.Row2.Z * 0.5 + p.Row2.W * 0.5, p.Row2.W),
-				new Vector4(p.Row3.X, p.Row3.Y, p.Row3.Z * 0.5 + p.Row3.W * 0.5, p.Row3.W));
+				new Vector4(p.Row0.X, p.Row0.Y * flipY, p.Row0.Z * 0.5 + p.Row0.W * 0.5, p.Row0.W),
+				new Vector4(p.Row1.X, p.Row1.Y * flipY, p.Row1.Z * 0.5 + p.Row1.W * 0.5, p.Row1.W),
+				new Vector4(p.Row2.X, p.Row2.Y * flipY, p.Row2.Z * 0.5 + p.Row2.W * 0.5, p.Row2.W),
+				new Vector4(p.Row3.X, p.Row3.Y * flipY, p.Row3.Z * 0.5 + p.Row3.W * 0.5, p.Row3.W));
 
 			var mapped = context.Map(transformBuffer, MapMode.WriteDiscard);
 			unsafe
@@ -529,7 +563,7 @@ namespace MatterHackers.RenderOpenGl
 			int vertexCount = immediateData.Positions.Count / 3;
 			if (vertexCount == 0) return;
 
-			bool hasTexCoords = immediateData.TexCoords.Count > 0 && texture2DEnabled && currentBoundTexture != 0;
+			bool hasTexCoords = immediateData.TexCoords.Count > 0 && texture2DEnabled && boundTextures[0] != 0;
 
 			if (hasTexCoords)
 			{
@@ -539,6 +573,30 @@ namespace MatterHackers.RenderOpenGl
 			{
 				FlushColoredVertices(vertexCount);
 			}
+		}
+
+		private int GetColorIndexForFlatShading(BeginMode mode, int i, int count)
+		{
+			if (!flatShading) return i;
+
+			int colorIdx = i;
+			if (mode == BeginMode.Triangles)
+			{
+				int triStart = i - (i % 3);
+				colorIdx = triStart + 2;
+			}
+			else if (mode == BeginMode.TriangleStrip)
+			{
+				colorIdx = i + 2;
+			}
+			else if (mode == BeginMode.Lines)
+			{
+				int lineStart = i - (i % 2);
+				colorIdx = lineStart + 1;
+			}
+
+			if (colorIdx >= count) colorIdx = count - 1;
+			return colorIdx;
 		}
 
 		private void FlushColoredVertices(int vertexCount)
@@ -558,7 +616,8 @@ namespace MatterHackers.RenderOpenGl
 					for (int i = 0; i < count; i++)
 					{
 						int vi = (offset + i) * 3;
-						int ci = (offset + i) * 4;
+						int colorIdx = GetColorIndexForFlatShading(immediateData.Mode, i, count);
+						int ci = (offset + colorIdx) * 4;
 
 						ptr[i * 7 + 0] = immediateData.Positions[vi];
 						ptr[i * 7 + 1] = immediateData.Positions[vi + 1];
@@ -576,10 +635,14 @@ namespace MatterHackers.RenderOpenGl
 				context.IASetInputLayout(posColorInputLayout);
 				context.IASetVertexBuffer(0, dynamicVertexBuffer, (uint)stride);
 				context.IASetPrimitiveTopology(GetTopology(immediateData.Mode));
-				context.VSSetShader(posColorVS);
-				context.PSSetShader(posColorPS);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posColorVS);
+					context.PSSetShader(flatShading ? posColorFlatPS : posColorPS);
+				}
 				context.VSSetConstantBuffer(0, transformBuffer);
 
+				BindActiveTextures();
 				ApplyRenderState();
 
 				context.Draw((uint)count, 0);
@@ -607,7 +670,8 @@ namespace MatterHackers.RenderOpenGl
 						int si = offset + i;
 						int vi = si * 3;
 						int ti = si * 2;
-						int ci = si * 4;
+						int colorIdx = GetColorIndexForFlatShading(immediateData.Mode, i, count);
+						int ci = (offset + colorIdx) * 4;
 
 						ptr[i * 9 + 0] = immediateData.Positions[vi];
 						ptr[i * 9 + 1] = immediateData.Positions[vi + 1];
@@ -627,15 +691,14 @@ namespace MatterHackers.RenderOpenGl
 				context.IASetInputLayout(posTexInputLayout);
 				context.IASetVertexBuffer(0, dynamicTexVertexBuffer, (uint)stride);
 				context.IASetPrimitiveTopology(GetTopology(immediateData.Mode));
-				context.VSSetShader(posTexVS);
-				context.PSSetShader(posTexPS);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posTexVS);
+					context.PSSetShader(flatShading ? posTexFlatPS : posTexPS);
+				}
 				context.VSSetConstantBuffer(0, transformBuffer);
 
-				if (textures.TryGetValue(currentBoundTexture, out var texInfo) && texInfo.ShaderResourceView != null)
-				{
-					context.PSSetShaderResource(0, texInfo.ShaderResourceView);
-					context.PSSetSampler(0, texInfo.Sampler ?? defaultSampler);
-				}
+				BindActiveTextures();
 
 				ApplyRenderState();
 
@@ -702,7 +765,7 @@ namespace MatterHackers.RenderOpenGl
 			renderStateDirty = false;
 
 			bool blendEnabled = enableCapState.TryGetValue((int)EnableCap.Blend, out var b) && b;
-			var desiredBlend = blendEnabled ? blendStateEnabled : blendStateDisabled;
+			var desiredBlend = GetOrCreateBlendState(blendEnabled, blendSrcFactor, blendDstFactor, currentColorWriteMask);
 			if (desiredBlend != lastAppliedBlendState)
 			{
 				context.OMSetBlendState(desiredBlend);
@@ -728,6 +791,28 @@ namespace MatterHackers.RenderOpenGl
 			{
 				context.RSSetState(desiredRasterizer);
 				lastAppliedRasterizerState = desiredRasterizer;
+			}
+
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				if (prog.UniformsDirty && prog.ConstantBuffer != null)
+				{
+					var mapped = context.Map(prog.ConstantBuffer, MapMode.WriteDiscard);
+					unsafe
+					{
+						fixed (float* pUniforms = prog.Uniforms)
+						{
+							System.Runtime.CompilerServices.Unsafe.CopyBlock((void*)mapped.DataPointer, pUniforms, (uint)(prog.Uniforms.Length * sizeof(float)));
+						}
+					}
+					context.Unmap(prog.ConstantBuffer, 0);
+					prog.UniformsDirty = false;
+				}
+				if (prog.ConstantBuffer != null)
+				{
+					context.VSSetConstantBuffer(0, prog.ConstantBuffer);
+					context.PSSetConstantBuffer(0, prog.ConstantBuffer);
+				}
 			}
 		}
 
@@ -876,7 +961,7 @@ namespace MatterHackers.RenderOpenGl
 
 			if (hasVertexPointer && vertexPointerData.pointer != IntPtr.Zero)
 			{
-				bool useTexture = hasTexCoordPointer && texture2DEnabled && currentBoundTexture != 0
+				bool useTexture = hasTexCoordPointer && texture2DEnabled && boundTextures[0] != 0
 					&& texCoordPointerData.pointer != IntPtr.Zero;
 
 				bool lightingOn = enableCapState.TryGetValue((int)EnableCap.Lighting, out var lit) && lit;
@@ -951,6 +1036,14 @@ namespace MatterHackers.RenderOpenGl
 			b = Math.Min(1.0f, b * lb);
 		}
 
+		private int GetAlignedBatchCount(BeginMode mode, int remaining, int maxVertices)
+		{
+			int batchCount = Math.Min(remaining, maxVertices);
+			if (mode == BeginMode.Triangles) batchCount -= batchCount % 3;
+			else if (mode == BeginMode.Lines) batchCount -= batchCount % 2;
+			return Math.Max(1, batchCount);
+		}
+
 		private void DrawArraysColored(BeginMode mode, int first, int totalCount, bool hasColorPointer, bool hasNormalPointer, bool lightingOn, bool light0On, bool light1On)
 		{
 			bool useLitShader = lightingOn && hasNormalPointer && normalPointerData.pointer != IntPtr.Zero;
@@ -961,16 +1054,22 @@ namespace MatterHackers.RenderOpenGl
 				stride = 10 * sizeof(float); // pos(3) + normal(3) + color(4)
 				UpdateLightBuffer(light0On, light1On);
 				context.IASetInputLayout(posColorLitInputLayout);
-				context.VSSetShader(posColorLitVS);
-				context.PSSetShader(posColorLitPS);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posColorLitVS);
+					context.PSSetShader(flatShading ? posColorLitFlatPS : posColorLitPS);
+				}
 				context.VSSetConstantBuffer(1, lightBuffer);
 			}
 			else
 			{
 				stride = 7 * sizeof(float); // pos(3) + color(4)
 				context.IASetInputLayout(posColorInputLayout);
-				context.VSSetShader(posColorVS);
-				context.PSSetShader(posColorPS);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posColorVS);
+					context.PSSetShader(flatShading ? posColorFlatPS : posColorPS);
+				}
 			}
 
 			UpdateTransformBuffer();
@@ -978,12 +1077,13 @@ namespace MatterHackers.RenderOpenGl
 			context.IASetVertexBuffer(0, dynamicVertexBuffer, (uint)stride);
 			context.IASetPrimitiveTopology(GetTopology(mode));
 			context.VSSetConstantBuffer(0, transformBuffer);
+			BindActiveTextures();
 			ApplyRenderState();
 
 			int offset = 0;
 			while (offset < totalCount)
 			{
-				int batchCount = Math.Min(totalCount - offset, MaxVertices);
+				int batchCount = GetAlignedBatchCount(mode, totalCount - offset, MaxVertices);
 
 				var mapped = context.Map(dynamicVertexBuffer, MapMode.WriteDiscard);
 				unsafe
@@ -1011,7 +1111,9 @@ namespace MatterHackers.RenderOpenGl
 							dest[i * 10 + 4] = srcNormal[ni + 1];
 							dest[i * 10 + 5] = srcNormal[ni + 2];
 
-							GetVertexColor(i, globalIdx, hasColorPointer, out float r, out float g, out float b, out float a);
+							int colorIdx = GetColorIndexForFlatShading(mode, i, batchCount);
+							int globalColorIdx = first + offset + colorIdx;
+							GetVertexColor(colorIdx, globalColorIdx, hasColorPointer, out float r, out float g, out float b, out float a);
 							dest[i * 10 + 6] = r;
 							dest[i * 10 + 7] = g;
 							dest[i * 10 + 8] = b;
@@ -1028,7 +1130,9 @@ namespace MatterHackers.RenderOpenGl
 							dest[i * 7 + 1] = srcVert[srcIdx + 1];
 							dest[i * 7 + 2] = vertexPointerData.size >= 3 ? srcVert[srcIdx + 2] : 0;
 
-							GetVertexColor(i, globalIdx, hasColorPointer, out float r, out float g, out float b, out float a);
+							int colorIdx = GetColorIndexForFlatShading(mode, i, batchCount);
+							int globalColorIdx = first + offset + colorIdx;
+							GetVertexColor(colorIdx, globalColorIdx, hasColorPointer, out float r, out float g, out float b, out float a);
 
 							if (lightingOn && srcNormal != null)
 							{
@@ -1061,16 +1165,22 @@ namespace MatterHackers.RenderOpenGl
 				stride = 12 * sizeof(float); // pos(3) + normal(3) + texcoord(2) + color(4)
 				UpdateLightBuffer(light0On, light1On);
 				context.IASetInputLayout(posTexLitInputLayout);
-				context.VSSetShader(posTexLitVS);
-				context.PSSetShader(posTexLitPS);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posTexLitVS);
+					context.PSSetShader(flatShading ? posTexLitFlatPS : posTexLitPS);
+				}
 				context.VSSetConstantBuffer(1, lightBuffer);
 			}
 			else
 			{
 				stride = 9 * sizeof(float); // pos(3) + texcoord(2) + color(4)
 				context.IASetInputLayout(posTexInputLayout);
-				context.VSSetShader(posTexVS);
-				context.PSSetShader(posTexPS);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posTexVS);
+					context.PSSetShader(flatShading ? posTexFlatPS : posTexPS);
+				}
 			}
 
 			UpdateTransformBuffer();
@@ -1078,18 +1188,14 @@ namespace MatterHackers.RenderOpenGl
 			context.IASetPrimitiveTopology(GetTopology(mode));
 			context.VSSetConstantBuffer(0, transformBuffer);
 
-			if (textures.TryGetValue(currentBoundTexture, out var texInfo) && texInfo.ShaderResourceView != null)
-			{
-				context.PSSetShaderResource(0, texInfo.ShaderResourceView);
-				context.PSSetSampler(0, texInfo.Sampler ?? defaultSampler);
-			}
+			BindActiveTextures();
 
 			ApplyRenderState();
 
 			int offset = 0;
 			while (offset < totalCount)
 			{
-				int batchCount = Math.Min(totalCount - offset, MaxVertices);
+				int batchCount = GetAlignedBatchCount(mode, totalCount - offset, MaxVertices);
 
 				var mapped = context.Map(dynamicTexVertexBuffer, MapMode.WriteDiscard);
 				unsafe
@@ -1168,12 +1274,301 @@ namespace MatterHackers.RenderOpenGl
 
 		public void DrawRangeElements(BeginMode mode, int start, int end, int count, DrawElementsType type, IntPtr indices)
 		{
-			// Simplified: treat as DrawArrays for now
+			DrawElements((int)mode, count, (int)type, indices);
 		}
 
 		public void DrawElements(int mode, int count, int elementType, IntPtr indices)
 		{
-			// Simplified: will be implemented for VBO path
+			if (isRecordingDisplayList) return;
+			if (count <= 0) return;
+
+			bool hasVertexPointer = arrayCapState.TryGetValue(ArrayCap.VertexArray, out var va) && va;
+			if (!hasVertexPointer || vertexPointerData.pointer == IntPtr.Zero) return;
+
+			bool hasColorPointer = arrayCapState.TryGetValue(ArrayCap.ColorArray, out var ca) && ca;
+			bool hasTexCoordPointer = arrayCapState.TryGetValue(ArrayCap.TextureCoordArray, out var ta) && ta;
+			bool hasNormalPointer = arrayCapState.TryGetValue(ArrayCap.NormalArray, out var na) && na;
+
+			bool useTexture = hasTexCoordPointer && texture2DEnabled && boundTextures[0] != 0
+				&& texCoordPointerData.pointer != IntPtr.Zero;
+
+			bool lightingOn = enableCapState.TryGetValue((int)EnableCap.Lighting, out var lit) && lit;
+			bool light0On = enableCapState.TryGetValue((int)EnableCap.Light0, out var l0) && l0;
+			bool light1On = enableCapState.TryGetValue((int)EnableCap.Light1, out var l1) && l1;
+
+			if (useTexture)
+			{
+				DrawElementsTextured((BeginMode)mode, count, elementType, indices, hasColorPointer, hasNormalPointer, lightingOn, light0On, light1On);
+			}
+			else
+			{
+				DrawElementsColored((BeginMode)mode, count, elementType, indices, hasColorPointer, hasNormalPointer, lightingOn, light0On, light1On);
+			}
+		}
+
+		private unsafe int GetIndex(void* indicesPtr, int type, int i)
+		{
+			if (type == 5121) return ((byte*)indicesPtr)[i]; // GL_UNSIGNED_BYTE
+			if (type == 5123) return ((ushort*)indicesPtr)[i]; // GL_UNSIGNED_SHORT
+			return (int)((uint*)indicesPtr)[i]; // GL_UNSIGNED_INT
+		}
+
+		private unsafe void ProcessBatchColored(BeginMode mode, float* dest, float* srcVert, float* srcNormal, int vertStride, int normStride, void* indicesPtr, int type, int offset, int batchCount, bool useLitShader, bool hasColorPointer, bool lightingOn, bool light0On, bool light1On)
+		{
+			for (int i = 0; i < batchCount; i++)
+			{
+				int index = GetIndex(indicesPtr, type, offset + i);
+				int colorElementIndex = GetColorIndexForFlatShading(mode, i, batchCount);
+				int colorIndex = GetIndex(indicesPtr, type, offset + colorElementIndex);
+
+				int vi = index * vertStride;
+				int ni = index * normStride;
+
+				if (useLitShader)
+				{
+					dest[i * 10 + 0] = srcVert[vi];
+					dest[i * 10 + 1] = srcVert[vi + 1];
+					dest[i * 10 + 2] = vertexPointerData.size >= 3 ? srcVert[vi + 2] : 0;
+					dest[i * 10 + 3] = srcNormal[ni];
+					dest[i * 10 + 4] = srcNormal[ni + 1];
+					dest[i * 10 + 5] = srcNormal[ni + 2];
+
+					GetVertexColor(colorElementIndex, colorIndex, hasColorPointer, out float r, out float g, out float b, out float a);
+					dest[i * 10 + 6] = r;
+					dest[i * 10 + 7] = g;
+					dest[i * 10 + 8] = b;
+					dest[i * 10 + 9] = a;
+				}
+				else
+				{
+					dest[i * 7 + 0] = srcVert[vi];
+					dest[i * 7 + 1] = srcVert[vi + 1];
+					dest[i * 7 + 2] = vertexPointerData.size >= 3 ? srcVert[vi + 2] : 0;
+
+					GetVertexColor(colorElementIndex, colorIndex, hasColorPointer, out float r, out float g, out float b, out float a);
+
+					if (lightingOn && srcNormal != null)
+					{
+						ApplyLighting(ref r, ref g, ref b, srcNormal[ni], srcNormal[ni + 1], srcNormal[ni + 2], light0On, light1On);
+					}
+
+					dest[i * 7 + 3] = r;
+					dest[i * 7 + 4] = g;
+					dest[i * 7 + 5] = b;
+					dest[i * 7 + 6] = a;
+				}
+			}
+		}
+
+		private void DrawElementsColored(BeginMode mode, int count, int type, IntPtr indices, bool hasColorPointer, bool hasNormalPointer, bool lightingOn, bool light0On, bool light1On)
+		{
+			bool useLitShader = lightingOn && hasNormalPointer && normalPointerData.pointer != IntPtr.Zero;
+
+			int stride = useLitShader ? 10 * sizeof(float) : 7 * sizeof(float);
+			if (useLitShader)
+			{
+				UpdateLightBuffer(light0On, light1On);
+				context.IASetInputLayout(posColorLitInputLayout);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posColorLitVS);
+					context.PSSetShader(posColorLitPS);
+				}
+				context.VSSetConstantBuffer(1, lightBuffer);
+			}
+			else
+			{
+				context.IASetInputLayout(posColorInputLayout);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posColorVS);
+					context.PSSetShader(posColorPS);
+				}
+			}
+
+			UpdateTransformBuffer();
+
+			context.IASetVertexBuffer(0, dynamicVertexBuffer, (uint)stride);
+			context.IASetPrimitiveTopology(GetTopology(mode));
+			context.VSSetConstantBuffer(0, transformBuffer);
+			BindActiveTextures();
+			ApplyRenderState();
+
+			int offset = 0;
+			byte[] vboData = null;
+			if (currentElementBuffer > 0 && bufferDataStore.TryGetValue(currentElementBuffer, out var data))
+			{
+				vboData = data;
+			}
+
+			while (offset < count)
+			{
+				int batchCount = GetAlignedBatchCount(mode, count - offset, MaxVertices);
+
+				var mapped = context.Map(dynamicVertexBuffer, MapMode.WriteDiscard);
+				unsafe
+				{
+					float* dest = (float*)mapped.DataPointer;
+					float* srcVert = (float*)vertexPointerData.pointer;
+					float* srcNormal = (hasNormalPointer && normalPointerData.pointer != IntPtr.Zero)
+						? (float*)normalPointerData.pointer : null;
+
+					int vertStride = vertexPointerData.stride > 0 ? vertexPointerData.stride / sizeof(float) : vertexPointerData.size;
+					int normStride = normalPointerData.stride > 0 ? normalPointerData.stride / sizeof(float) : 3;
+
+					void* indicesPtr = (void*)indices;
+					if (vboData != null)
+					{
+						fixed (byte* vboPtr = vboData)
+						{
+							indicesPtr = vboPtr + (int)indices;
+							ProcessBatchColored(mode, dest, srcVert, srcNormal, vertStride, normStride, indicesPtr, type, offset, batchCount, useLitShader, hasColorPointer, lightingOn, light0On, light1On);
+						}
+					}
+					else
+					{
+						ProcessBatchColored(mode, dest, srcVert, srcNormal, vertStride, normStride, indicesPtr, type, offset, batchCount, useLitShader, hasColorPointer, lightingOn, light0On, light1On);
+					}
+				}
+				context.Unmap(dynamicVertexBuffer, 0);
+
+				context.Draw((uint)batchCount, 0);
+
+				offset += batchCount;
+			}
+		}
+
+		private unsafe void ProcessBatchTextured(BeginMode mode, float* dest, float* srcVert, float* srcTex, float* srcNormal, int vertStride, int texStride, int normStride, void* indicesPtr, int type, int offset, int batchCount, bool useLitShader, bool hasColorPointer, bool lightingOn, bool light0On, bool light1On)
+		{
+			for (int i = 0; i < batchCount; i++)
+			{
+				int index = GetIndex(indicesPtr, type, offset + i);
+				int colorElementIndex = GetColorIndexForFlatShading(mode, i, batchCount);
+				int colorIndex = GetIndex(indicesPtr, type, offset + colorElementIndex);
+
+				int vi = index * vertStride;
+				int ti = index * texStride;
+				int ni = index * normStride;
+
+				if (useLitShader)
+				{
+					dest[i * 12 + 0] = srcVert[vi];
+					dest[i * 12 + 1] = srcVert[vi + 1];
+					dest[i * 12 + 2] = vertexPointerData.size >= 3 ? srcVert[vi + 2] : 0;
+					dest[i * 12 + 3] = srcNormal[ni];
+					dest[i * 12 + 4] = srcNormal[ni + 1];
+					dest[i * 12 + 5] = srcNormal[ni + 2];
+					dest[i * 12 + 6] = srcTex[ti];
+					dest[i * 12 + 7] = srcTex[ti + 1];
+
+					GetVertexColor(colorElementIndex, colorIndex, hasColorPointer, out float r, out float g, out float b, out float a);
+					dest[i * 12 + 8] = r;
+					dest[i * 12 + 9] = g;
+					dest[i * 12 + 10] = b;
+					dest[i * 12 + 11] = a;
+				}
+				else
+				{
+					dest[i * 9 + 0] = srcVert[vi];
+					dest[i * 9 + 1] = srcVert[vi + 1];
+					dest[i * 9 + 2] = vertexPointerData.size >= 3 ? srcVert[vi + 2] : 0;
+					dest[i * 9 + 3] = srcTex[ti];
+					dest[i * 9 + 4] = srcTex[ti + 1];
+
+					GetVertexColor(colorElementIndex, colorIndex, hasColorPointer, out float r, out float g, out float b, out float a);
+
+					if (lightingOn && srcNormal != null)
+					{
+						ApplyLighting(ref r, ref g, ref b, srcNormal[ni], srcNormal[ni + 1], srcNormal[ni + 2], light0On, light1On);
+					}
+
+					dest[i * 9 + 5] = r;
+					dest[i * 9 + 6] = g;
+					dest[i * 9 + 7] = b;
+					dest[i * 9 + 8] = a;
+				}
+			}
+		}
+
+		private void DrawElementsTextured(BeginMode mode, int count, int type, IntPtr indices, bool hasColorPointer, bool hasNormalPointer, bool lightingOn, bool light0On, bool light1On)
+		{
+			bool useLitShader = lightingOn && hasNormalPointer && normalPointerData.pointer != IntPtr.Zero;
+
+			int stride = useLitShader ? 12 * sizeof(float) : 9 * sizeof(float);
+			if (useLitShader)
+			{
+				UpdateLightBuffer(light0On, light1On);
+				context.IASetInputLayout(posTexLitInputLayout);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posTexLitVS);
+					context.PSSetShader(posTexLitPS);
+				}
+				context.VSSetConstantBuffer(1, lightBuffer);
+			}
+			else
+			{
+				context.IASetInputLayout(posTexInputLayout);
+				if (currentProgram == 0)
+				{
+					context.VSSetShader(posTexVS);
+					context.PSSetShader(posTexPS);
+				}
+			}
+
+			UpdateTransformBuffer();
+			context.IASetVertexBuffer(0, dynamicTexVertexBuffer, (uint)stride);
+			context.IASetPrimitiveTopology(GetTopology(mode));
+			context.VSSetConstantBuffer(0, transformBuffer);
+
+			BindActiveTextures();
+
+			ApplyRenderState();
+
+			int offset = 0;
+			byte[] vboData = null;
+			if (currentElementBuffer > 0 && bufferDataStore.TryGetValue(currentElementBuffer, out var data))
+			{
+				vboData = data;
+			}
+
+			while (offset < count)
+			{
+				int batchCount = GetAlignedBatchCount(mode, count - offset, MaxVertices);
+
+				var mapped = context.Map(dynamicTexVertexBuffer, MapMode.WriteDiscard);
+				unsafe
+				{
+					float* dest = (float*)mapped.DataPointer;
+					float* srcVert = (float*)vertexPointerData.pointer;
+					float* srcTex = (float*)texCoordPointerData.pointer;
+					float* srcNormal = (hasNormalPointer && normalPointerData.pointer != IntPtr.Zero)
+						? (float*)normalPointerData.pointer : null;
+
+					int vertStride = vertexPointerData.stride > 0 ? vertexPointerData.stride / sizeof(float) : vertexPointerData.size;
+					int texStride = texCoordPointerData.stride > 0 ? texCoordPointerData.stride / sizeof(float) : texCoordPointerData.size;
+					int normStride = normalPointerData.stride > 0 ? normalPointerData.stride / sizeof(float) : 3;
+
+					void* indicesPtr = (void*)indices;
+					if (vboData != null)
+					{
+						fixed (byte* vboPtr = vboData)
+						{
+							indicesPtr = vboPtr + (int)indices;
+							ProcessBatchTextured(mode, dest, srcVert, srcTex, srcNormal, vertStride, texStride, normStride, indicesPtr, type, offset, batchCount, useLitShader, hasColorPointer, lightingOn, light0On, light1On);
+						}
+					}
+					else
+					{
+						ProcessBatchTextured(mode, dest, srcVert, srcTex, srcNormal, vertStride, texStride, normStride, indicesPtr, type, offset, batchCount, useLitShader, hasColorPointer, lightingOn, light0On, light1On);
+					}
+				}
+				context.Unmap(dynamicTexVertexBuffer, 0);
+
+				context.Draw((uint)batchCount, 0);
+
+				offset += batchCount;
+			}
 		}
 
 		// --- State management ---
@@ -1204,33 +1599,39 @@ namespace MatterHackers.RenderOpenGl
 			arrayCapState[array] = false;
 		}
 
-		private Dictionary<(int src, int dst), ID3D11BlendState> blendStateCache = new Dictionary<(int, int), ID3D11BlendState>();
-
 		public void BlendFunc(int sfactor, int dfactor)
 		{
 			blendSrcFactor = sfactor;
 			blendDstFactor = dfactor;
 			renderStateDirty = true;
+		}
 
-			var key = (sfactor, dfactor);
-			if (!blendStateCache.ContainsKey(key))
+		private ID3D11BlendState GetOrCreateBlendState(bool blendEnable, int srcFactor, int dstFactor, ColorWriteEnable writeMask)
+		{
+			if (!blendEnable)
+			{
+				srcFactor = 0;
+				dstFactor = 0;
+			}
+			var key = (blendEnable, srcFactor, dstFactor, writeMask);
+			if (!blendStateCache.TryGetValue(key, out var state))
 			{
 				var desc = new BlendDescription();
 				desc.RenderTarget[0] = new RenderTargetBlendDescription
 				{
-					BlendEnable = true,
-					SourceBlend = MapBlendFactor(sfactor),
-					DestinationBlend = MapBlendFactor(dfactor),
+					BlendEnable = blendEnable,
+					SourceBlend = MapBlendFactor(srcFactor),
+					DestinationBlend = MapBlendFactor(dstFactor),
 					BlendOperation = BlendOperation.Add,
-					SourceBlendAlpha = Blend.One,
-					DestinationBlendAlpha = Blend.InverseSourceAlpha,
+					SourceBlendAlpha = MapBlendFactor(srcFactor),
+					DestinationBlendAlpha = MapBlendFactor(dstFactor),
 					BlendOperationAlpha = BlendOperation.Add,
-					RenderTargetWriteMask = ColorWriteEnable.All,
+					RenderTargetWriteMask = writeMask,
 				};
-				blendStateCache[key] = device.CreateBlendState(desc);
+				state = device.CreateBlendState(desc);
+				blendStateCache[key] = state;
 			}
-
-			blendStateEnabled = blendStateCache[key];
+			return state;
 		}
 
 		private static Blend MapBlendFactor(int glFactor)
@@ -1274,7 +1675,20 @@ namespace MatterHackers.RenderOpenGl
 			renderStateDirty = true;
 		}
 
-		public void ColorMask(bool red, bool green, bool blue, bool alpha) { }
+		public void ColorMask(bool red, bool green, bool blue, bool alpha)
+		{
+			ColorWriteEnable mask = ColorWriteEnable.None;
+			if (red) mask |= ColorWriteEnable.Red;
+			if (green) mask |= ColorWriteEnable.Green;
+			if (blue) mask |= ColorWriteEnable.Blue;
+			if (alpha) mask |= ColorWriteEnable.Alpha;
+			
+			if (currentColorWriteMask != mask)
+			{
+				currentColorWriteMask = mask;
+				renderStateDirty = true;
+			}
+		}
 
 		public void ColorMaterial(MaterialFace face, ColorMaterialParameter mode) { }
 
@@ -1290,7 +1704,10 @@ namespace MatterHackers.RenderOpenGl
 			renderStateDirty = true;
 		}
 
-		public void ShadeModel(ShadingModel model) { }
+		public void ShadeModel(ShadingModel model)
+		{
+			flatShading = model == ShadingModel.Flat;
+		}
 
 		public void PolygonOffset(float factor, float units)
 		{
@@ -1372,11 +1789,11 @@ namespace MatterHackers.RenderOpenGl
 			var matrix = new Matrix4X4(m);
 			if (matrixMode == OpenGl.MatrixMode.Modelview)
 			{
-				modelViewStack.Push(modelViewStack.Pop() * matrix);
+				modelViewStack.Push(matrix * modelViewStack.Pop());
 			}
 			else
 			{
-				projectionStack.Push(projectionStack.Pop() * matrix);
+				projectionStack.Push(matrix * projectionStack.Pop());
 			}
 			transformDirty = true;
 		}
@@ -1420,11 +1837,11 @@ namespace MatterHackers.RenderOpenGl
 
 			if (matrixMode == OpenGl.MatrixMode.Modelview)
 			{
-				modelViewStack.Push(modelViewStack.Pop() * ortho);
+				modelViewStack.Push(ortho * modelViewStack.Pop());
 			}
 			else
 			{
-				projectionStack.Push(projectionStack.Pop() * ortho);
+				projectionStack.Push(ortho * projectionStack.Pop());
 			}
 			transformDirty = true;
 		}
@@ -1439,11 +1856,11 @@ namespace MatterHackers.RenderOpenGl
 			var translation = Matrix4X4.CreateTranslation(x, y, z);
 			if (matrixMode == OpenGl.MatrixMode.Modelview)
 			{
-				modelViewStack.Push(modelViewStack.Pop() * translation);
+				modelViewStack.Push(translation * modelViewStack.Pop());
 			}
 			else
 			{
-				projectionStack.Push(projectionStack.Pop() * translation);
+				projectionStack.Push(translation * projectionStack.Pop());
 			}
 			transformDirty = true;
 		}
@@ -1456,11 +1873,11 @@ namespace MatterHackers.RenderOpenGl
 
 			if (matrixMode == OpenGl.MatrixMode.Modelview)
 			{
-				modelViewStack.Push(modelViewStack.Pop() * rotation);
+				modelViewStack.Push(rotation * modelViewStack.Pop());
 			}
 			else
 			{
-				projectionStack.Push(projectionStack.Pop() * rotation);
+				projectionStack.Push(rotation * projectionStack.Pop());
 			}
 			transformDirty = true;
 		}
@@ -1470,11 +1887,11 @@ namespace MatterHackers.RenderOpenGl
 			var scale = Matrix4X4.CreateScale(x, y, z);
 			if (matrixMode == OpenGl.MatrixMode.Modelview)
 			{
-				modelViewStack.Push(modelViewStack.Pop() * scale);
+				modelViewStack.Push(scale * modelViewStack.Pop());
 			}
 			else
 			{
-				projectionStack.Push(projectionStack.Pop() * scale);
+				projectionStack.Push(scale * projectionStack.Pop());
 			}
 			transformDirty = true;
 		}
@@ -1504,11 +1921,25 @@ namespace MatterHackers.RenderOpenGl
 		{
 			if ((mask & 0x00004000) != 0) // GL_COLOR_BUFFER_BIT
 			{
-				context.ClearRenderTargetView(renderTargetView, clearColor);
+				if (currentBoundFramebuffer == 0)
+				{
+					context.ClearRenderTargetView(renderTargetView, clearColor);
+				}
+				else if (framebuffers.TryGetValue(currentBoundFramebuffer, out var fbo) && fbo.RenderTargetView != null)
+				{
+					context.ClearRenderTargetView(fbo.RenderTargetView, clearColor);
+				}
 			}
 			if ((mask & 0x00000100) != 0) // GL_DEPTH_BUFFER_BIT
 			{
-				context.ClearDepthStencilView(depthStencilView, DepthStencilClearFlags.Depth, 1.0f, 0);
+				if (currentBoundFramebuffer == 0)
+				{
+					context.ClearDepthStencilView(depthStencilView, DepthStencilClearFlags.Depth, 1.0f, 0);
+				}
+				else if (framebuffers.TryGetValue(currentBoundFramebuffer, out var fbo) && fbo.DepthStencilView != null)
+				{
+					context.ClearDepthStencilView(fbo.DepthStencilView, DepthStencilClearFlags.Depth, 1.0f, 0);
+				}
 			}
 		}
 
@@ -1536,7 +1967,16 @@ namespace MatterHackers.RenderOpenGl
 
 		public void Scissor(int x, int y, int width, int height)
 		{
-			context.RSSetScissorRect(x, renderTargetHeight - y - height, x + width, renderTargetHeight - y);
+			scissorX = x;
+			scissorY = y;
+			scissorWidth = width;
+			scissorHeight = height;
+
+			if (width < 0) width = 0;
+			if (height < 0) height = 0;
+			
+			int d3dY = renderTargetHeight - y - height;
+			context.RSSetScissorRect(x, d3dY, width, height);
 		}
 
 		// --- Buffer management ---
@@ -1655,14 +2095,18 @@ namespace MatterHackers.RenderOpenGl
 
 		public void BindTexture(int target, int texture)
 		{
-			currentBoundTexture = texture;
+			if (activeTextureUnit >= 0 && activeTextureUnit < boundTextures.Length)
+			{
+				boundTextures[activeTextureUnit] = texture;
+			}
 		}
 
 		public void TexImage2D(int target, int level, int internalFormat, int width, int height, int border, int format, int type, byte[] pixels)
 		{
-			if (currentBoundTexture <= 0 || !textures.ContainsKey(currentBoundTexture)) return;
+			int currentTex = boundTextures[activeTextureUnit];
+			if (currentTex <= 0 || !textures.ContainsKey(currentTex)) return;
 
-			var texInfo = textures[currentBoundTexture];
+			var texInfo = textures[currentTex];
 
 			// 0x1908 = GL_RGBA, 0x80E1 = GL_BGRA
 			var d3dFormat = format == 0x80E1 ? Format.B8G8R8A8_UNorm : Format.R8G8B8A8_UNorm;
@@ -1716,28 +2160,38 @@ namespace MatterHackers.RenderOpenGl
 				Format = texInfo.D3DFormat,
 				SampleDescription = new SampleDescription(1, 0),
 				Usage = ResourceUsage.Default,
-				BindFlags = BindFlags.ShaderResource,
+				BindFlags = BindFlags.ShaderResource | BindFlags.RenderTarget,
 			};
 
 			var initDataArray = new SubresourceData[mipCount];
 			var handles = new System.Runtime.InteropServices.GCHandle[mipCount];
+			bool hasAnyData = false;
+			foreach (var d in texInfo.PendingMipData) if (d.pixels != null) hasAnyData = true;
+
 			try
 			{
-				for (int i = 0; i < mipCount; i++)
+				if (hasAnyData)
 				{
-					var (pixels, w, h) = texInfo.PendingMipData[i];
-					if (pixels != null)
+					for (int i = 0; i < mipCount; i++)
 					{
-						handles[i] = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
-						initDataArray[i] = new SubresourceData(handles[i].AddrOfPinnedObject(), (uint)(w * 4));
+						var (pixels, w, h) = texInfo.PendingMipData[i];
+						if (pixels != null)
+						{
+							handles[i] = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+							initDataArray[i] = new SubresourceData(handles[i].AddrOfPinnedObject(), (uint)(w * 4));
+						}
+						else
+						{
+							initDataArray[i] = new SubresourceData(IntPtr.Zero, (uint)(w * 4));
+						}
 					}
-					else
-					{
-						initDataArray[i] = new SubresourceData(IntPtr.Zero, (uint)(w * 4));
-					}
-				}
 
-				texInfo.Texture = device.CreateTexture2D(texDesc, initDataArray);
+					texInfo.Texture = device.CreateTexture2D(texDesc, initDataArray);
+				}
+				else
+				{
+					texInfo.Texture = device.CreateTexture2D(texDesc);
+				}
 			}
 			finally
 			{
@@ -1753,7 +2207,8 @@ namespace MatterHackers.RenderOpenGl
 
 		public void TexParameter(TextureTarget target, TextureParameterName pname, int param)
 		{
-			if (currentBoundTexture <= 0 || !textures.TryGetValue(currentBoundTexture, out var texInfo)) return;
+			int currentTex = boundTextures[activeTextureUnit];
+			if (currentTex <= 0 || !textures.TryGetValue(currentTex, out var texInfo)) return;
 
 			bool changed = false;
 			switch ((int)pname)
@@ -1795,7 +2250,17 @@ namespace MatterHackers.RenderOpenGl
 			TexParameter(TextureTarget.Texture2D, (TextureParameterName)pname, param);
 		}
 		public void TexEnv(TextureEnvironmentTarget target, TextureEnvParameter pname, float param) { }
-		public void ActiveTexture(int texture) { }
+		public void ActiveTexture(int texture)
+		{
+			if (texture >= 0x84C0 && texture < 0x84C0 + 8) // GL_TEXTURE0
+			{
+				activeTextureUnit = texture - 0x84C0;
+			}
+			else if (texture >= 0 && texture < 8)
+			{
+				activeTextureUnit = texture;
+			}
+		}
 
 		// --- Shader program management ---
 
@@ -1848,6 +2313,37 @@ namespace MatterHackers.RenderOpenGl
 			}
 		}
 
+		private void ReflectUniforms(ShaderProgramInfo prog, byte[] bytecode)
+		{
+			try
+			{
+				using var reflection = Compiler.Reflect<Vortice.Direct3D11.Shader.ID3D11ShaderReflection>(bytecode);
+				for (int i = 0; i < reflection.Description.ConstantBuffers; i++)
+				{
+					var cb = reflection.GetConstantBufferByIndex((uint)i);
+					var desc = cb.Description;
+					if (desc.Type.ToString() == "ConstantBuffer")
+					{
+						prog.UniformBufferSize = Math.Max(prog.UniformBufferSize, (int)desc.Size);
+						for (uint v = 0; v < desc.VariableCount; v++)
+						{
+							var varInfo = cb.GetVariableByIndex(v);
+							var vDesc = varInfo.Description;
+							if (!prog.UniformLocations.ContainsKey(vDesc.Name))
+							{
+								// Store the offset in floats
+								prog.UniformLocations[vDesc.Name] = (int)(vDesc.StartOffset / 4);
+							}
+						}
+					}
+				}
+			}
+			catch (Exception ex)
+			{
+				Console.WriteLine($"Shader reflection failed: {ex.Message}");
+			}
+		}
+
 		public void LinkProgram(int id)
 		{
 			if (!shaderPrograms.TryGetValue(id, out var prog)) return;
@@ -1855,11 +2351,28 @@ namespace MatterHackers.RenderOpenGl
 			if (prog.VertexShaderId > 0 && shaderObjects.TryGetValue(prog.VertexShaderId, out var vs) && vs.ByteCode != null)
 			{
 				prog.VertexShader = device.CreateVertexShader(vs.ByteCode);
+				ReflectUniforms(prog, vs.ByteCode);
 			}
 
 			if (prog.FragmentShaderId > 0 && shaderObjects.TryGetValue(prog.FragmentShaderId, out var fs) && fs.ByteCode != null)
 			{
 				prog.PixelShader = device.CreatePixelShader(fs.ByteCode);
+				ReflectUniforms(prog, fs.ByteCode);
+			}
+
+			if (prog.ConstantBuffer == null && prog.UniformBufferSize > 0)
+			{
+				// Constant buffers must be a multiple of 16 bytes
+				int bufferSize = (prog.UniformBufferSize + 15) & ~15;
+				prog.Uniforms = new float[bufferSize / 4];
+				
+				prog.ConstantBuffer = device.CreateBuffer(new BufferDescription
+				{
+					ByteWidth = (uint)bufferSize,
+					BindFlags = BindFlags.ConstantBuffer,
+					Usage = ResourceUsage.Dynamic,
+					CPUAccessFlags = CpuAccessFlags.Write
+				});
 			}
 		}
 
@@ -1869,6 +2382,8 @@ namespace MatterHackers.RenderOpenGl
 			if (program == 0)
 			{
 				// Restore default shaders
+				context.VSSetShader(null);
+				context.PSSetShader(null);
 				return;
 			}
 
@@ -1884,17 +2399,136 @@ namespace MatterHackers.RenderOpenGl
 			shaderObjects.Remove(shader);
 		}
 
+		public void DeleteProgram(int program)
+		{
+			if (shaderPrograms.TryGetValue(program, out var prog))
+			{
+				prog.Dispose();
+				shaderPrograms.Remove(program);
+			}
+		}
+
 		public void DetachShader(int id, int shader) { }
 
 		public int GetUniformLocation(int program, string name)
 		{
-			// Simple hash-based uniform location
-			return name.GetHashCode() & 0x7FFFFFFF;
+			if (shaderPrograms.TryGetValue(program, out var prog))
+			{
+				if (prog.UniformLocations.TryGetValue(name, out var loc))
+				{
+					return loc;
+				}
+			}
+			return -1;
 		}
 
-		public void Uniform1i(int location, int v0) { }
-		public void Uniform1f(int location, float v0) { }
-		public void UniformMatrix4fv(int location, int count, int transpose, float[] value) { }
+		public void Uniform1i(int location, int v0) 
+		{ 
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				if (prog.Uniforms != null && location >= 0 && location < prog.Uniforms.Length)
+				{
+					prog.Uniforms[location] = v0;
+					prog.UniformsDirty = true;
+					renderStateDirty = true;
+				}
+			}
+		}
+
+		public void Uniform1f(int location, float v0) 
+		{ 
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				if (prog.Uniforms != null && location >= 0 && location < prog.Uniforms.Length)
+				{
+					prog.Uniforms[location] = v0;
+					prog.UniformsDirty = true;
+					renderStateDirty = true;
+				}
+			}
+		}
+
+		public void Uniform2f(int location, float v0, float v1) 
+		{ 
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				if (prog.Uniforms != null && location >= 0 && location + 1 < prog.Uniforms.Length)
+				{
+					prog.Uniforms[location + 0] = v0;
+					prog.Uniforms[location + 1] = v1;
+					prog.UniformsDirty = true;
+					renderStateDirty = true;
+				}
+			}
+		}
+
+		public void Uniform3f(int location, float v0, float v1, float v2) 
+		{ 
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				if (prog.Uniforms != null && location >= 0 && location + 2 < prog.Uniforms.Length)
+				{
+					prog.Uniforms[location + 0] = v0;
+					prog.Uniforms[location + 1] = v1;
+					prog.Uniforms[location + 2] = v2;
+					prog.UniformsDirty = true;
+					renderStateDirty = true;
+				}
+			}
+		}
+
+		public void Uniform4f(int location, float v0, float v1, float v2, float v3) 
+		{ 
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				if (prog.Uniforms != null && location >= 0 && location + 3 < prog.Uniforms.Length)
+				{
+					prog.Uniforms[location + 0] = v0;
+					prog.Uniforms[location + 1] = v1;
+					prog.Uniforms[location + 2] = v2;
+					prog.Uniforms[location + 3] = v3;
+					prog.UniformsDirty = true;
+					renderStateDirty = true;
+				}
+			}
+		}
+
+		public void UniformMatrix4fv(int location, int count, int transpose, float[] value) 
+		{ 
+			if (currentProgram != 0 && shaderPrograms.TryGetValue(currentProgram, out var prog))
+			{
+				int floatsNeeded = count * 16;
+				if (prog.Uniforms != null && location >= 0 && location + floatsNeeded - 1 < prog.Uniforms.Length && value != null && value.Length >= floatsNeeded)
+				{
+					for (int c = 0; c < count; c++)
+					{
+						int baseLoc = location + c * 16;
+						int baseVal = c * 16;
+
+						if (transpose != 0)
+						{
+							// Source is transposed, write transposed
+							for (int i = 0; i < 4; i++)
+							{
+								for (int j = 0; j < 4; j++)
+								{
+									prog.Uniforms[baseLoc + i * 4 + j] = value[baseVal + j * 4 + i];
+								}
+							}
+						}
+						else
+						{
+							for (int i = 0; i < 16; i++)
+							{
+								prog.Uniforms[baseLoc + i] = value[baseVal + i];
+							}
+						}
+					}
+					prog.UniformsDirty = true;
+					renderStateDirty = true;
+				}
+			}
+		}
 		public void VertexAttribPointer(int index, int size, int type, int normalized, int stride, IntPtr pointer) { }
 		public void EnableVertexAttribArray(int index) { }
 		public void BindVertexArray(int vertexArray) { }
@@ -1917,23 +2551,89 @@ namespace MatterHackers.RenderOpenGl
 
 		public void BindFramebuffer(int target, int buffer)
 		{
+			currentBoundFramebuffer = buffer;
+			transformDirty = true; // Projection depends on framebuffer state
+
 			if (buffer == 0)
 			{
 				context.OMSetRenderTargets(renderTargetView, depthStencilView);
+				if (currentBackBuffer != null)
+				{
+					renderTargetHeight = (int)currentBackBuffer.Description.Height;
+				}
+			}
+			else if (framebuffers.TryGetValue(buffer, out var fbo))
+			{
+				context.OMSetRenderTargets(fbo.RenderTargetView, fbo.DepthStencilView);
+				if (fbo.TextureId > 0 && textures.TryGetValue(fbo.TextureId, out var texInfo))
+				{
+					renderTargetHeight = texInfo.Height;
+				}
+			}
+
+			// Re-apply viewport and scissor with the new renderTargetHeight
+			Viewport(viewportX, viewportY, viewportWidth, viewportHeight);
+			if (scissorEnabled)
+			{
+				Scissor(scissorX, scissorY, scissorWidth, scissorHeight);
 			}
 		}
 
 		public int GenFramebuffer()
 		{
-			return nextFramebufferId++;
+			int id = nextFramebufferId++;
+			framebuffers[id] = new FramebufferInfo();
+			return id;
 		}
 
 		public void GenFramebuffers(int v, out int fbo)
 		{
-			fbo = nextFramebufferId++;
+			fbo = GenFramebuffer();
 		}
 
-		public void FramebufferTexture2D(int target, int attachment, int textarget, int texture, int level) { }
+		public void DeleteFramebuffers(int n, ref int framebuffers)
+		{
+			if (n == 1 && this.framebuffers.TryGetValue(framebuffers, out var fbo))
+			{
+				fbo.RenderTargetView?.Dispose();
+				fbo.DepthStencilView?.Dispose();
+				this.framebuffers.Remove(framebuffers);
+				if (currentBoundFramebuffer == framebuffers)
+				{
+					BindFramebuffer(0x8D40, 0);
+				}
+			}
+		}
+
+		public int CheckFramebufferStatus(int target)
+		{
+			return 0x8CD5; // GL_FRAMEBUFFER_COMPLETE
+		}
+
+		public void FramebufferTexture2D(int target, int attachment, int textarget, int texture, int level)
+		{
+			if (currentBoundFramebuffer <= 0 || !framebuffers.TryGetValue(currentBoundFramebuffer, out var fbo)) return;
+
+			if (attachment == 0x8CE0) // GL_COLOR_ATTACHMENT0
+			{
+				fbo.TextureId = texture;
+				fbo.RenderTargetView?.Dispose();
+				fbo.RenderTargetView = null;
+
+				if (texture > 0 && textures.TryGetValue(texture, out var texInfo) && texInfo.Texture != null)
+				{
+					fbo.RenderTargetView = device.CreateRenderTargetView(texInfo.Texture);
+				}
+
+				// Re-bind to apply changes if it is the current FBO
+				BindFramebuffer(target, currentBoundFramebuffer);
+			}
+			else if (attachment == 0x8D00 || attachment == 0x8D20) // GL_DEPTH_ATTACHMENT or GL_DEPTH_STENCIL_ATTACHMENT
+			{
+				// Simplification: if requested, we could create a DepthStencilView here.
+				// For basic FBOs without depth, or sharing the default depth, we can leave it null.
+			}
+		}
 
 		// --- Display list emulation ---
 
@@ -2030,8 +2730,18 @@ namespace MatterHackers.RenderOpenGl
 				tex.Texture?.Dispose();
 			}
 
+			foreach (var prog in shaderPrograms.Values) prog?.Dispose();
+			shaderPrograms.Clear();
+
 			foreach (var bs in blendStateCache.Values) bs?.Dispose();
 			blendStateCache.Clear();
+
+			foreach (var fbo in framebuffers.Values)
+			{
+				fbo.RenderTargetView?.Dispose();
+				fbo.DepthStencilView?.Dispose();
+			}
+			framebuffers.Clear();
 
 			dynamicVertexBuffer?.Dispose();
 			dynamicTexVertexBuffer?.Dispose();
@@ -2039,18 +2749,20 @@ namespace MatterHackers.RenderOpenGl
 			lightBuffer?.Dispose();
 			posColorVS?.Dispose();
 			posColorPS?.Dispose();
+			posColorFlatPS?.Dispose();
 			posColorInputLayout?.Dispose();
 			posTexVS?.Dispose();
 			posTexPS?.Dispose();
+			posTexFlatPS?.Dispose();
 			posTexInputLayout?.Dispose();
 			posColorLitVS?.Dispose();
 			posColorLitPS?.Dispose();
+			posColorLitFlatPS?.Dispose();
 			posColorLitInputLayout?.Dispose();
 			posTexLitVS?.Dispose();
 			posTexLitPS?.Dispose();
+			posTexLitFlatPS?.Dispose();
 			posTexLitInputLayout?.Dispose();
-			blendStateEnabled?.Dispose();
-			blendStateDisabled?.Dispose();
 			foreach (var ds in depthStencilCache.Values) ds?.Dispose();
 			depthStencilCache.Clear();
 			rasterizerNoCull?.Dispose();
@@ -2093,12 +2805,24 @@ namespace MatterHackers.RenderOpenGl
 			public List<(byte[] pixels, int width, int height)> PendingMipData;
 		}
 
-		private class ShaderProgramInfo
+		private class ShaderProgramInfo : IDisposable
 		{
 			public int VertexShaderId;
 			public int FragmentShaderId;
 			public ID3D11VertexShader VertexShader;
 			public ID3D11PixelShader PixelShader;
+			public Dictionary<string, int> UniformLocations = new Dictionary<string, int>();
+			public float[] Uniforms;
+			public int UniformBufferSize;
+			public ID3D11Buffer ConstantBuffer;
+			public bool UniformsDirty = false;
+
+			public void Dispose()
+			{
+				VertexShader?.Dispose();
+				PixelShader?.Dispose();
+				ConstantBuffer?.Dispose();
+			}
 		}
 
 		private class ShaderInfo

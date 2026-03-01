@@ -190,6 +190,25 @@ namespace MatterHackers.Agg.UI
 
 		private int frameCount;
 
+		public void CaptureScreenshot(string path)
+		{
+			if (d3dControl != null && !d3dControl.IsDisposed)
+			{
+				d3dControl.CaptureScreenshot(path);
+			}
+		}
+
+		public void MakeCurrent()
+		{
+			if (d3dControl != null && !d3dControl.IsDisposed)
+			{
+				var dummy1 = this.Handle;
+				var dummy2 = d3dControl.Handle;
+				d3dControl.InitializeD3D();
+				GL.Instance = d3dControl.GlBackend;
+			}
+		}
+
 		public override void CopyBackBufferToScreen(Graphics displayGraphics)
 		{
 			if (d3dControl != null && !d3dControl.IsDisposed)

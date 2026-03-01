@@ -284,6 +284,45 @@ namespace MatterHackers.Agg.UI
 			}
 		}
 
+		public void CaptureScreenshot(string path)
+		{
+			glControl.MakeCurrent();
+			int width = ClientSize.Width;
+			int height = ClientSize.Height;
+			using var bitmap = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+			var bmpData = bitmap.LockBits(
+				new Rectangle(0, 0, width, height),
+				System.Drawing.Imaging.ImageLockMode.WriteOnly,
+				System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+
+			try
+			{
+#if USE_GLES
+				OpenTK.Graphics.ES11.GL.ReadPixels(0, 0, width, height, OpenTK.Graphics.ES11.All.Bgra, OpenTK.Graphics.ES11.All.UnsignedByte, bmpData.Scan0);
+#else
+				OpenTK.Graphics.OpenGL.GL.ReadPixels(0, 0, width, height, OpenTK.Graphics.OpenGL.PixelFormat.Bgra, OpenTK.Graphics.OpenGL.PixelType.UnsignedByte, bmpData.Scan0);
+#endif
+			}
+			finally
+			{
+				bitmap.UnlockBits(bmpData);
+			}
+
+			// OpenGL ReadPixels reads from bottom-left, so we need to flip vertically
+			bitmap.RotateFlip(RotateFlipType.RotateNoneFlipY);
+			bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+		}
+
+		public void MakeCurrent()
+		{
+			if (glControl != null && !glControl.IsDisposed)
+			{
+				var unused = glControl.Handle; // Force child control handle
+				glControl.MakeCurrent();
+				RenderOpenGl.OpenGl.GL.Instance = new OpenTkGl();
+			}
+		}
+
 		public override void CopyBackBufferToScreen(Graphics displayGraphics)
 		{
 			// If this throws an assert, you are calling MakeCurrent() before the glControl is done being constructed.

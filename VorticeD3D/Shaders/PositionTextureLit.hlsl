@@ -23,7 +23,7 @@ struct VS_INPUT
     float3 Position : POSITION;
     float3 Normal : NORMAL;
     float2 TexCoord : TEXCOORD0;
-    float4 Color : COLOR;
+    float4 vertColor : COLOR;
 };
 
 struct PS_INPUT
@@ -38,6 +38,7 @@ PS_INPUT VS(VS_INPUT input)
     PS_INPUT output;
     float4 worldPos = mul(float4(input.Position, 1.0), ModelView);
     output.Position = mul(worldPos, Projection);
+    output.Position.z = (output.Position.z + output.Position.w) * 0.5;
     output.TexCoord = input.TexCoord;
 
     float3 n = normalize(input.Normal);
@@ -57,7 +58,7 @@ PS_INPUT VS(VS_INPUT input)
         litColor += Light1Ambient.rgb + Light1Diffuse.rgb * ndotl;
     }
 
-    output.Color = float4(min(1, input.Color.rgb * litColor), input.Color.a);
+    output.Color = float4(min(1, input.vertColor.rgb * litColor), input.vertColor.a);
     return output;
 }
 

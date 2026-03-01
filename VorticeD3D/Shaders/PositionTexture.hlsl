@@ -11,7 +11,7 @@ struct VS_INPUT
 {
     float3 Position : POSITION;
     float2 TexCoord : TEXCOORD0;
-    float4 Color : COLOR;
+    float4 vertColor : COLOR;
 };
 
 struct PS_INPUT
@@ -26,8 +26,9 @@ PS_INPUT VS(VS_INPUT input)
     PS_INPUT output;
     float4 worldPos = mul(float4(input.Position, 1.0), ModelView);
     output.Position = mul(worldPos, Projection);
+    output.Position.z = (output.Position.z + output.Position.w) * 0.5;
     output.TexCoord = input.TexCoord;
-    output.Color = input.Color;
+    output.Color = input.vertColor;
     return output;
 }
 
