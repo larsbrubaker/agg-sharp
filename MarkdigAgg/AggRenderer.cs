@@ -1,5 +1,5 @@
 /*
-Copyright(c) 2025, Lars Brubaker, John Lewin
+Copyright(c) 2026, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@ using MatterHackers.Agg.UI;
 
 namespace Markdig.Renderers
 {
-	public class TextWordX : TextWidget
+	public class TextWordX : MarkdownTextWidget
 	{
 		public TextWordX(ThemeConfig theme)
 			: base("", pointSize: 10, textColor: theme.TextColor)
@@ -48,7 +48,7 @@ namespace Markdig.Renderers
 		}
 	}
 
-	public class TextSpaceX : TextWidget, ISkipIfFirst
+	public class TextSpaceX : MarkdownTextWidget, ISkipIfFirst
 	{
 		public TextSpaceX(ThemeConfig theme)
 			: base("", pointSize: 10, textColor: theme.TextColor)

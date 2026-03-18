@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2018, John Lewin
+Copyright (c) 2026, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -36,10 +36,13 @@ namespace MatterHackers.Agg.UI.Tests
 {
 	public class SimulatedClipboard : ISystemClipboard
 	{
+		private string Html { get; set; }
         private ImageBuffer Image { get; set; }
 		private string Text { get; set; }
 
 		public bool ContainsFileDropList => throw new NotImplementedException();
+
+		public bool ContainsHtml => !string.IsNullOrEmpty(Html);
 
 		public bool ContainsImage => Image != null;
 
@@ -55,6 +58,11 @@ namespace MatterHackers.Agg.UI.Tests
 			throw new NotImplementedException();
 		}
 
+		public string GetHtml()
+		{
+			return Html;
+		}
+
 		public string GetText()
 		{
 			return Text;
@@ -68,6 +76,12 @@ namespace MatterHackers.Agg.UI.Tests
 		public void SetText(string text)
 		{
 			Text = text;
+		}
+
+		public void SetTextAndHtml(string text, string html)
+		{
+			Text = text;
+			Html = html;
 		}
 	}
 }

@@ -1,12 +1,20 @@
-﻿using MatterHackers.Agg.Image;
+using MatterHackers.Agg.Image;
 using System.Collections.Specialized;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Text;
 
 namespace MatterHackers.Agg.UI
 {
 	public class WindowsFormsClipboard : ISystemClipboard
 	{
+		private const string HtmlHeaderTemplate =
+			"Version:0.9\r\n" +
+			"StartHTML:{0:0000000000}\r\n" +
+			"EndHTML:{1:0000000000}\r\n" +
+			"StartFragment:{2:0000000000}\r\n" +
+			"EndFragment:{3:0000000000}\r\n";
+
 		public string GetText()
 		{
 			try
@@ -16,6 +24,20 @@ namespace MatterHackers.Agg.UI
 			catch
 			{
 				return "Clipboard Failed";
+			}
+		}
+
+		public string GetHtml()
+		{
+			try
+			{
+				return System.Windows.Forms.Clipboard.ContainsText(System.Windows.Forms.TextDataFormat.Html)
+					? System.Windows.Forms.Clipboard.GetText(System.Windows.Forms.TextDataFormat.Html)
+					: string.Empty;
+			}
+			catch
+			{
+				return string.Empty;
 			}
 		}
 
@@ -37,6 +59,25 @@ namespace MatterHackers.Agg.UI
 			}
 		}
 
+		public void SetTextAndHtml(string text, string html)
+		{
+			try
+			{
+				var dataObject = new System.Windows.Forms.DataObject();
+				dataObject.SetText(text ?? string.Empty, System.Windows.Forms.TextDataFormat.UnicodeText);
+
+				if (!string.IsNullOrWhiteSpace(html))
+				{
+					dataObject.SetText(ToClipboardHtmlFragment(html), System.Windows.Forms.TextDataFormat.Html);
+				}
+
+				SetDataObject(dataObject);
+			}
+			catch
+			{
+			}
+		}
+
 		public bool ContainsText
 		{
 			get
@@ -44,6 +85,21 @@ namespace MatterHackers.Agg.UI
 				try
 				{
 					return System.Windows.Forms.Clipboard.ContainsText();
+				}
+				catch
+				{
+					return false;
+				}
+			}
+		}
+
+		public bool ContainsHtml
+		{
+			get
+			{
+				try
+				{
+					return System.Windows.Forms.Clipboard.ContainsText(System.Windows.Forms.TextDataFormat.Html);
 				}
 				catch
 				{
@@ -260,6 +316,35 @@ namespace MatterHackers.Agg.UI
 		public StringCollection GetFileDropList()
 		{
 			return System.Windows.Forms.Clipboard.GetFileDropList();
+		}
+
+		private static void SetDataObject(System.Windows.Forms.IDataObject dataObject)
+		{
+			if (UiThread.IsUiThread)
+			{
+				System.Windows.Forms.Clipboard.SetDataObject(dataObject, true);
+			}
+			else
+			{
+				UiThread.RunOnIdle(() => System.Windows.Forms.Clipboard.SetDataObject(dataObject, true));
+			}
+		}
+
+		private static string ToClipboardHtmlFragment(string html)
+		{
+			const string prefix = "<html><body><!--StartFragment-->";
+			const string suffix = "<!--EndFragment--></body></html>";
+			var fragment = html ?? string.Empty;
+			var initialHeader = string.Format(HtmlHeaderTemplate, 0, 0, 0, 0);
+			var fullHtml = prefix + fragment + suffix;
+
+			var startHtml = Encoding.UTF8.GetByteCount(initialHeader);
+			var startFragment = startHtml + Encoding.UTF8.GetByteCount(prefix);
+			var endFragment = startFragment + Encoding.UTF8.GetByteCount(fragment);
+			var endHtml = startHtml + Encoding.UTF8.GetByteCount(fullHtml);
+			var finalHeader = string.Format(HtmlHeaderTemplate, startHtml, endHtml, startFragment, endFragment);
+
+			return finalHeader + fullHtml;
 		}
 	}
 }

@@ -17,8 +17,11 @@ namespace Markdig.Renderers.Agg
 
 		public List<AggTableRow> Rows { get; }
 
+		public List<HorizontalLine> HorizontalRules { get; } = new List<HorizontalLine>();
+
 		public AggTable(Table table) : base(FlowDirection.TopToBottom)
 		{
+			this.Rows = new List<AggTableRow>();
 			this.HAnchor = HAnchor.Stretch;
 			this.Columns = table.ColumnDefinitions.Select(c => new AggTableColumn(c)).ToList();
 		}
@@ -33,6 +36,19 @@ namespace Markdig.Renderers.Agg
 				{
 					column.SetCellWidths();
 				}
+			}
+
+			var rowWidth = (this.Rows ?? new List<AggTableRow>())
+				.Where(row => row.Cells.Count > 0)
+				.Select(row => row.Cells.Sum(cell => cell.Width))
+				.DefaultIfEmpty(0)
+				.Max();
+
+			foreach (var rule in this.HorizontalRules)
+			{
+				rule.HAnchor = HAnchor.Left;
+				rule.Margin = new BorderDouble(left: 9);
+				rule.Width = rowWidth + 2;
 			}
 
 			// Re-run layout after columns have real measured widths.

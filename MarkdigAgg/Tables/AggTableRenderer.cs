@@ -13,6 +13,9 @@ namespace Markdig.Renderers.Agg
 {
 	public class AggTableRenderer : AggObjectRenderer<Table>
 	{
+		private const int TableBorderAlpha = 150;
+		private const int ZebraStripeAlpha = 12;
+
 		protected override void Write(AggRenderer renderer, Table mdTable)
 		{
 			if (renderer == null) throw new ArgumentNullException(nameof(renderer));
@@ -25,28 +28,49 @@ namespace Markdig.Renderers.Agg
 
 			renderer.Push(aggTable);
 
-			foreach (var rowObj in mdTable)
+			for (var rowIndex = 0; rowIndex < mdTable.Count; rowIndex++)
 			{
-				var mdRow = (TableRow)rowObj;
+				var mdRow = (TableRow)mdTable[rowIndex];
+				var borderColor = new Color(renderer.Theme.TextColor, TableBorderAlpha);
+
+				if (rowIndex == 0)
+				{
+					var rule = CreateHorizontalRule(borderColor);
+					aggTable.HorizontalRules.Add(rule);
+					renderer.WriteBlock(rule);
+				}
+				else
+				{
+					var rule = CreateHorizontalRule(borderColor);
+					aggTable.HorizontalRules.Add(rule);
+					renderer.WriteBlock(rule);
+				}
 
 				var aggRow = new AggTableRow()
 				{
 					IsHeadingRow = mdRow.IsHeader,
 				};
+				aggTable.Rows.Add(aggRow);
 
 				renderer.Push(aggRow);
 
-				if (mdRow.IsHeader)
+				if (!mdRow.IsHeader && rowIndex % 2 == 0)
 				{
-					// Update to desired header row styling and/or move into AggTableRow for consistency
-					aggRow.BackgroundColor = renderer.Theme.TabBarBackground;
+					aggRow.BackgroundColor = new Color(renderer.Theme.TextColor, ZebraStripeAlpha);
 				}
 
 				for (var i = 0; i < mdRow.Count; i++)
 				{
 					var mdCell = (TableCell)mdRow[i];
 
-					var aggCell = new AggTableCell();
+					var aggCell = new AggTableCell
+					{
+						BorderColor = borderColor,
+						Border = new BorderDouble(
+							left: 1,
+							right: i == mdRow.Count - 1 ? 1 : 0,
+							bottom: 0)
+					};
 					aggRow.Cells.Add(aggCell);
 
 					if (mdTable.ColumnDefinitions.Count > 0)
@@ -85,8 +109,20 @@ namespace Markdig.Renderers.Agg
 				renderer.Pop();
 			}
 
+			var finalRule = CreateHorizontalRule(new Color(renderer.Theme.TextColor, TableBorderAlpha));
+			aggTable.HorizontalRules.Add(finalRule);
+			renderer.WriteBlock(finalRule);
+
 			// Pop table
 			renderer.Pop();
+		}
+
+		private static HorizontalLine CreateHorizontalRule(Color borderColor)
+		{
+			return new HorizontalLine(borderColor)
+			{
+				HAnchor = HAnchor.Left
+			};
 		}
 	}
 }

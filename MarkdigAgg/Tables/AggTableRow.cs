@@ -1,5 +1,5 @@
-﻿// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
-// Copyright (c) 2022, John Lewin
+// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
+// Copyright (c) 2025, John Lewin
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
@@ -16,7 +16,7 @@ namespace Markdig.Renderers.Agg
 	{
 		public AggTableRow()
 		{
-			this.Margin = new BorderDouble(10, 4);
+			this.Margin = new BorderDouble(10, 0);
 			this.VAnchor = VAnchor.Absolute;
 			this.Height = 25;
 		}
@@ -29,22 +29,27 @@ namespace Markdig.Renderers.Agg
 		// Override AddChild to push styles to child elements when table rows are resolved to the tree
 		public override GuiWidget AddChild(GuiWidget childToAdd, int indexInChildrenList = -1)
 		{
+			if (!this.IsHeadingRow)
+			{
+				return base.AddChild(childToAdd, indexInChildrenList);
+			}
+
 			if (childToAdd is TextWidget textWidget)
 			{
-				// textWidget.TextColor = new Color("#036ac3");
-				if (this.IsHeadingRow)
-				{
-					textWidget.Bold = true;
-				}
+				textWidget.Bold = true;
 			}
 			else if (childToAdd is TextLinkX textLink)
 			{
 				foreach (var childTextWidget in childToAdd.Children.OfType<TextWidget>())
 				{
-					if (this.IsHeadingRow)
-					{
-						childTextWidget.Bold = true;
-					}
+					childTextWidget.Bold = true;
+				}
+			}
+			else
+			{
+				foreach (var childTextWidget in childToAdd.Descendants<TextWidget>())
+				{
+					childTextWidget.Bold = true;
 				}
 			}
 

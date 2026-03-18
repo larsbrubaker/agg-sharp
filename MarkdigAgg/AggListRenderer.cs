@@ -1,8 +1,9 @@
-// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
+// Copyright (c) 2026, Lars Brubaker, Nicolas Musset. All rights reserved.
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
 using System;
+using Markdig.Agg;
 using Markdig.Syntax;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
@@ -31,7 +32,7 @@ namespace Markdig.Renderers.Agg
 			this.HAnchor = HAnchor.Stretch;
 			this.Margin = new BorderDouble(bottom: 3);
 
-			base.AddChild(new TextWidget(markerText, pointSize: 11, textColor: theme.TextColor)
+			base.AddChild(new MarkdownTextWidget(markerText, pointSize: 11, textColor: theme.TextColor)
 			{
 				Margin = new BorderDouble(right: 2),
 				VAnchor = VAnchor.Top,

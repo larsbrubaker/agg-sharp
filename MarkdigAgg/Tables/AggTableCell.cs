@@ -1,4 +1,4 @@
-// Copyright (c) 2026, Nicolas Musset, John Lewin, Lars Brubaker
+// Copyright (c) 2025, Nicolas Musset, John Lewin, Lars Brubaker
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
@@ -21,6 +21,7 @@ namespace Markdig.Renderers.Agg
 		{
 			if (this.Children.Count > 0 && this.Children.First() is FlowLeftRightWithWrapping wrappedChild)
 			{
+				wrappedChild.ContentHAnchor = this.FlowHAnchor;
 				ContentWidth = wrappedChild.ContentWidth;
 
 				if (this.Parent is AggTableRow parentRow)

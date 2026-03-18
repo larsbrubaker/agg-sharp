@@ -29,10 +29,12 @@ either expressed or implied, of the FreeBSD Project.
 
 using System.Linq;
 using System.Threading.Tasks;
+using HtmlAgilityPack;
 using Markdig.Agg;
 using Markdig.Renderers.Agg;
 using Markdig.Renderers.Agg.Inlines;
 using MatterHackers.Agg;
+using MatterHackers.Agg.Image;
 using MatterHackers.Agg.UI;
 using TUnit.Assertions;
 using TUnit.Core;
@@ -123,6 +125,201 @@ namespace Markdig.Agg.Tests
 			await Assert.That(headerRow.Cells[0].FlowHAnchor).IsEqualTo(HAnchor.Left);
 			await Assert.That(headerRow.Cells[1].FlowHAnchor).IsEqualTo(HAnchor.Center);
 			await Assert.That(headerRow.Cells[2].FlowHAnchor).IsEqualTo(HAnchor.Right);
+		}
+
+		[Test]
+		public async Task AlignmentMarkersPositionTextWithinCells()
+		{
+			var root = RenderMarkdown(
+				"""
+				| L | C | R |
+				| :--- | :---: | ---: |
+				| VeryWideLeftContent | VeryWideCenterContent | VeryWideRightContent |
+				""");
+
+			root.Width = 900;
+			root.PerformLayout();
+
+			var headerRow = root
+				.Descendants<AggTable>()
+				.Single()
+				.Children
+				.OfType<AggTableRow>()
+				.First();
+
+			var leftText = headerRow.Cells[0].Descendants<MarkdownTextWidget>().Single(widget => widget.Text == "L");
+			var centerText = headerRow.Cells[1].Descendants<MarkdownTextWidget>().Single(widget => widget.Text == "C");
+			var rightText = headerRow.Cells[2].Descendants<MarkdownTextWidget>().Single(widget => widget.Text == "R");
+
+			var leftBounds = leftText.TransformToParentSpace(headerRow.Cells[0], leftText.LocalBounds);
+			var centerBounds = centerText.TransformToParentSpace(headerRow.Cells[1], centerText.LocalBounds);
+			var rightBounds = rightText.TransformToParentSpace(headerRow.Cells[2], rightText.LocalBounds);
+
+			await Assert.That(leftBounds.Left).IsLessThan(centerBounds.Left);
+			await Assert.That(centerBounds.Left).IsLessThan(rightBounds.Left);
+		}
+
+		[Test]
+		public async Task EdgeAlignedCellsUseSymmetricInsets()
+		{
+			var root = RenderMarkdown(
+				"""
+				| Feature | Status | Notes |
+				| --- | --- | ---: |
+				| Headings | Ready | 6 levels |
+				| Tables | Ready | Pipe and grid |
+				""");
+
+			root.Width = 900;
+			root.PerformLayout();
+
+			var headerRow = root
+				.Descendants<AggTable>()
+				.Single()
+				.Children
+				.OfType<AggTableRow>()
+				.First();
+
+			var leftText = headerRow.Cells[0].Descendants<MarkdownTextWidget>().Single(widget => widget.Text == "Feature");
+			var rightText = headerRow.Cells[2].Descendants<MarkdownTextWidget>().Single(widget => widget.Text == "Notes");
+
+			var leftBounds = leftText.TransformToParentSpace(headerRow.Cells[0], leftText.LocalBounds);
+			var rightBounds = rightText.TransformToParentSpace(headerRow.Cells[2], rightText.LocalBounds);
+
+			var leftInset = leftBounds.Left - headerRow.Cells[0].LocalBounds.Left;
+			var rightInset = headerRow.Cells[2].LocalBounds.Right - rightBounds.Right;
+
+			await Assert.That(System.Math.Abs(leftInset - rightInset)).IsLessThan(1);
+		}
+
+		[Test]
+		public async Task PipeTablesRenderCellGridlines()
+		{
+			var root = RenderMarkdown(
+				"""
+				| Feature | Status |
+				| --- | --- |
+				| Tables | Ready |
+				| Images | Local |
+				""");
+
+			var table = root
+				.Descendants<AggTable>()
+				.Single();
+			var rows = table.Children.OfType<AggTableRow>().ToList();
+			var cells = rows
+				.SelectMany(row => row.Cells)
+				.ToList();
+
+			await Assert.That(cells.All(cell => cell.Border.Left > 0)).IsTrue();
+			await Assert.That(table.Children.OfType<HorizontalLine>().Count()).IsGreaterThanOrEqualTo(rows.Count + 1);
+		}
+
+		[Test]
+		public async Task PipeTablesRenderVisibleHorizontalSeparators()
+		{
+			var theme = new ThemeConfig();
+			var markdownWidget = new MarkdownWidget(theme, scrollContent: false)
+			{
+				HAnchor = HAnchor.Stretch,
+				VAnchor = VAnchor.Stretch,
+				Markdown =
+				"""
+				| Feature | Status |
+				| --- | --- |
+				| Headings | Ready |
+				| Tables | Ready |
+				"""
+			};
+			var container = new GuiWidget(600, 220)
+			{
+				DoubleBuffer = true,
+				BackgroundColor = Color.White
+			};
+			container.AddChild(markdownWidget);
+			container.PerformLayout();
+			container.BackBuffer.NewGraphics2D().Clear(Color.White);
+			container.OnDraw(container.BackBuffer.NewGraphics2D());
+
+			var table = markdownWidget.Descendants<AggTable>().Single();
+			var rows = table.Children.OfType<AggTableRow>().ToList();
+			var rowBounds = rows[1].TransformToParentSpace(container, rows[1].LocalBounds);
+			var tableBounds = table.TransformToParentSpace(container, table.LocalBounds);
+			var separatorY = (int)System.Math.Round(rowBounds.Top);
+			var foundSeparatorPixel = false;
+
+			for (int y = separatorY - 2; y <= separatorY + 2 && !foundSeparatorPixel; y++)
+			{
+				for (int x = (int)System.Math.Round(tableBounds.Left) + 5; x <= (int)System.Math.Round(tableBounds.Right) - 5; x++)
+				{
+					if (container.BackBuffer.GetPixel(x, y) != Color.White)
+					{
+						foundSeparatorPixel = true;
+						break;
+					}
+				}
+			}
+
+			await Assert.That(foundSeparatorPixel).IsTrue();
+		}
+
+		[Test]
+		public async Task PipeTablesUseStripingBoldHeadersAndSemiTransparentBorders()
+		{
+			var theme = new ThemeConfig();
+			var root = new GuiWidget();
+			var document = new AggMarkdownDocument
+			{
+				Markdown =
+				"""
+				| Feature | Status |
+				| --- | --- |
+				| Headings | Ready |
+				| Tables | Ready |
+				| Images | Ready |
+				"""
+			};
+
+			document.Parse(theme, root);
+
+			var rows = root
+				.Descendants<AggTable>()
+				.Single()
+				.Children
+				.OfType<AggTableRow>()
+				.ToList();
+			var allCells = rows.SelectMany(row => row.Cells).ToList();
+
+			await Assert.That(rows[0].BackgroundColor.Alpha0To255).IsEqualTo(0);
+			await Assert.That(rows[2].BackgroundColor.Alpha0To255).IsGreaterThan(0);
+			await Assert.That(rows[0].Descendants<TextWidget>().Where(widget => widget.Text == "Feature" || widget.Text == "Status").All(widget => widget.Bold)).IsTrue();
+			await Assert.That(allCells.All(cell => cell.BorderColor == new Color(theme.TextColor, 150))).IsTrue();
+		}
+
+		[Test]
+		public async Task StyledHtmlUsesStripedRowsBoldHeadersAndNoHeaderBackgroundFill()
+		{
+			var html = AggMarkdownDocument.ToStyledHtml(
+				"""
+				| Left | Center | Right |
+				| :--- | :---: | ---: |
+				| A | B | C |
+				| D | E | F |
+				""",
+				new ThemeConfig());
+
+			var document = new HtmlDocument();
+			document.LoadHtml(html);
+
+			var headerCell = document.DocumentNode.SelectSingleNode("//th");
+			var bodyRows = document.DocumentNode.SelectNodes("//tbody/tr");
+
+			await Assert.That(headerCell).IsNotNull();
+			await Assert.That(bodyRows?.Count).IsEqualTo(2);
+			await Assert.That(headerCell.GetAttributeValue("style", string.Empty)).Contains("font-weight:700");
+			await Assert.That(headerCell.GetAttributeValue("style", string.Empty)).Contains("text-align:left");
+			await Assert.That(headerCell.GetAttributeValue("style", string.Empty)).DoesNotContain("background-color");
+			await Assert.That(bodyRows[1].GetAttributeValue("style", string.Empty)).Contains("background-color");
 		}
 
 		[Test]

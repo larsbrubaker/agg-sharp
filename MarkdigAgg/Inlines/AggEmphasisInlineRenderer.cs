@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright(c) 2024, Lars Brubaker, John Lewin
 All rights reserved.
 
@@ -43,6 +43,8 @@ namespace Markdig.Renderers.Agg.Inlines
 
 			this.delimiter = delimiter;
 		}
+
+		public char Delimiter => delimiter;
 
 		public override GuiWidget AddChild(GuiWidget childToAdd, int indexInChildrenList = -1)
 		{

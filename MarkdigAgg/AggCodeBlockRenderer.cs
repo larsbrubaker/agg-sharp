@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using Markdig.Agg;
 using Markdig.Helpers;
 using Markdig.Syntax;
 using MatterHackers.Agg;
@@ -35,7 +36,7 @@ namespace Markdig.Renderers.Agg
 				? string.Empty
 				: slice.Text.Substring(slice.Start, slice.Length);
 
-			var textWidget = new TextWidget(text, pointSize: 10, textColor: theme.TextColor, ellipsisIfClipped: false, typeFace: GetMonoTypeFace())
+			var textWidget = new MarkdownTextWidget(text, pointSize: 10, textColor: theme.TextColor, ellipsisIfClipped: false, typeFace: GetMonoTypeFace())
 			{
 				HAnchor = HAnchor.Stretch,
 				VAnchor = VAnchor.Fit,

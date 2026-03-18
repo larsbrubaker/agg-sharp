@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright(c) 2024, Lars Brubaker, John Lewin
 All rights reserved.
 
@@ -50,6 +50,8 @@ namespace Markdig.Renderers.Agg.Inlines
 			this.url = url;
 			this.aggRenderer = renderer;
 		}
+
+		public string Url => linkInline?.Url ?? url;
 
 		protected override void OnClick(MouseEventArgs mouseEvent)
 		{

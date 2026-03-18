@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
+// Copyright (c) 2026, Lars Brubaker, Nicolas Musset. All rights reserved.
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
@@ -12,8 +12,11 @@ namespace Markdig.Renderers.Agg
 	{
 		private readonly double pointSize;
 
+		public int Level { get; }
+
 		public HeadingRowX(int level)
 		{
+			Level = level;
 			pointSize = GetPointSize(level);
 			this.VAnchor = VAnchor.Fit;
 			this.HAnchor = HAnchor.Stretch;

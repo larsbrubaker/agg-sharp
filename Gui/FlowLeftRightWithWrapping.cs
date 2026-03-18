@@ -1,5 +1,5 @@
-﻿/*
-Copyright (c) 2014, Lars Brubaker
+/*
+Copyright (c) 2025, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -80,6 +80,25 @@ namespace MatterHackers.Agg.UI
 		public bool Proportional { get; set; }
 
 		public bool Center { get; set; }
+
+		private HAnchor contentHAnchor = HAnchor.Left;
+		public HAnchor ContentHAnchor
+		{
+			get => contentHAnchor;
+			set
+			{
+				if (contentHAnchor == value)
+				{
+					return;
+				}
+
+				contentHAnchor = value;
+				if (Parent != null)
+				{
+					DoWrappingLayout();
+				}
+			}
+		}
 
         public FlowLeftRightWithWrapping()
 			: base(FlowDirection.TopToBottom)
@@ -278,7 +297,7 @@ namespace MatterHackers.Agg.UI
 				}
 
 				MakeProportionalIfRequired();
-				MakeCenterIfRequired();
+				AlignRowsIfRequired();
 
 				doingLayout = false;
 			}
@@ -323,9 +342,10 @@ namespace MatterHackers.Agg.UI
             }
         }
 
-		private void MakeCenterIfRequired()
+		private void AlignRowsIfRequired()
 		{
-			if (Center)
+			var contentHAnchor = Center ? HAnchor.Center : ContentHAnchor;
+			if ((contentHAnchor & (HAnchor.Center | HAnchor.Right)) != 0)
 			{
 				foreach (var row in Children)
 				{
@@ -336,8 +356,10 @@ namespace MatterHackers.Agg.UI
 					{
 						using (row.LayoutLock())
 						{
-							// add a spacer before the first item
-							row.AddChild(new GuiWidget(extraWidth / 2, 2), 0);
+							var leadingSpace = (contentHAnchor & HAnchor.Right) == HAnchor.Right
+								? Math.Max(0, extraWidth - row.Padding.Width)
+								: extraWidth / 2;
+							row.AddChild(new GuiWidget(leadingSpace, 2), 0);
 						}
 
 						row.PerformLayout();
