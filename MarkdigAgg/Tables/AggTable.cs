@@ -1,11 +1,12 @@
-﻿// Copyright (c) Nicolas Musset. All rights reserved.
-// Copyright (c) 2022, John Lewin
+// Copyright (c) Nicolas Musset. All rights reserved.
+// Copyright (c) 2026, Lars Brubaker, John Lewin
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
 using System.Collections.Generic;
 using System.Linq;
 using Markdig.Extensions.Tables;
+using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 
 namespace Markdig.Renderers.Agg
@@ -19,11 +20,14 @@ namespace Markdig.Renderers.Agg
 
 		public AggTable(Table table) : base(FlowDirection.TopToBottom)
 		{
+			this.HAnchor = HAnchor.Stretch;
 			this.Columns = table.ColumnDefinitions.Select(c => new AggTableColumn(c)).ToList();
 		}
 
 		public override void OnLayout(LayoutEventArgs layoutEventArgs)
 		{
+			base.OnLayout(layoutEventArgs);
+
 			if (this.Columns?.Count > 0)
 			{
 				foreach (var column in this.Columns)
@@ -32,6 +36,7 @@ namespace Markdig.Renderers.Agg
 				}
 			}
 
+			// Re-run layout after columns have real measured widths.
 			base.OnLayout(layoutEventArgs);
 		}
 	}

@@ -1,5 +1,5 @@
-﻿// Copyright (c) Nicolas Musset. All rights reserved.
-// Copyright (c) 2022, John Lewin
+// Copyright (c) Nicolas Musset. All rights reserved.
+// Copyright (c) 2025, John Lewin
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
@@ -39,7 +39,7 @@ namespace Markdig.Renderers.Agg
 				if (mdRow.IsHeader)
 				{
 					// Update to desired header row styling and/or move into AggTableRow for consistency
-					aggRow.BackgroundColor = MarkdownWidget.Theme.TabBarBackground;
+					aggRow.BackgroundColor = renderer.Theme.TabBarBackground;
 				}
 
 				for (var i = 0; i < mdRow.Count; i++)

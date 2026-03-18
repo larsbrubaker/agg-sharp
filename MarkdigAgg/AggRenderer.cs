@@ -1,5 +1,5 @@
-﻿/*
-Copyright(c) 2024, Lars Brubaker, John Lewin
+/*
+Copyright(c) 2025, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -73,6 +73,8 @@ namespace Markdig.Renderers
 		private readonly Stack<GuiWidget> stack = new Stack<GuiWidget>();
 		private char[] buffer;
 		private ThemeConfig theme;
+
+		internal ThemeConfig Theme => theme;
 
 		public GuiWidget RootWidget { get; }
 

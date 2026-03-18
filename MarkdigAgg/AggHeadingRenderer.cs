@@ -28,7 +28,7 @@ namespace Markdig.Renderers.Agg
 			//    paragraph.SetResourceReference(FrameworkContentElement.StyleProperty, styleKey);
 			// }
 
-			renderer.Push(new HeadingRowX()); // paragraph);
+			renderer.Push(new HeadingRowX(obj.Level)); // paragraph);
 			renderer.WriteLeafInline(obj);
 			renderer.Pop();
 		}

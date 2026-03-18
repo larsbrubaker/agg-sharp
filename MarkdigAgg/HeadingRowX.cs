@@ -1,9 +1,8 @@
-﻿// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
+// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
 using Markdig.Renderers.Agg.Inlines;
-using Markdig.Syntax;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 
@@ -11,20 +10,36 @@ namespace Markdig.Renderers.Agg
 {
 	public class HeadingRowX : FlowLeftRightWithWrapping
 	{
-		public HeadingRowX()
+		private readonly double pointSize;
+
+		public HeadingRowX(int level)
 		{
+			pointSize = GetPointSize(level);
 			this.VAnchor = VAnchor.Fit;
 			this.HAnchor = HAnchor.Stretch;
 			this.Margin = new BorderDouble(3, 4, 0, 12);
 			this.RowPadding = new BorderDouble(0, 3);
 		}
 
+		private static double GetPointSize(int level)
+		{
+			return level switch
+			{
+				1 => 20,
+				2 => 17,
+				3 => 15,
+				4 => 13,
+				5 => 12,
+				_ => 11
+			};
+		}
+
 		public override GuiWidget AddChild(GuiWidget childToAdd, int indexInChildrenList = -1)
 		{
 			if (childToAdd is TextWidget textWidget)
 			{
-				// textWidget.TextColor = new Color("#036ac3");
-				textWidget.PointSize = 14;
+				textWidget.PointSize = pointSize;
+				textWidget.Bold = true;
 			}
 			else if (childToAdd is TextLinkX textLink)
 			{
@@ -32,7 +47,8 @@ namespace Markdig.Renderers.Agg
 				{
 					if (child is TextWidget childTextWidget)
 					{
-						childTextWidget.PointSize = 14;
+						childTextWidget.PointSize = pointSize;
+						childTextWidget.Bold = true;
 					}
 				}
 			}

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
+// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
 // Copyright (c) 2022, John Lewin
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
@@ -26,22 +26,14 @@ namespace Markdig.Renderers.Agg
 		// TODO: Investigate. Without this solution, child content is wrapped and clipped, leaving only the last text block visible
 		private void AggTableCell_Layout(object sender, EventArgs e)
 		{
-			Console.WriteLine(Parent?.Name);
-			if (this.Children.Count > 0 && this.Children.First() is FlowLeftRightWithWrapping wrappedChild
-				&& wrappedChild.Height != this.Height)
+			if (this.Children.Count > 0 && this.Children.First() is FlowLeftRightWithWrapping wrappedChild)
 			{
-				//using (this.LayoutLock())
+				ContentWidth = wrappedChild.ContentWidth;
+
+				if (this.Parent is AggTableRow parentRow)
 				{
-					//// Set height to ensure bounds grow to content after reflow
-					//this.Height = wrappedChild.Height;
-
-					if (this.Parent is AggTableRow parentRow)
-					{
-						parentRow.CellHeightChanged(wrappedChild.Height);
-					}
+					parentRow.CellHeightChanged(wrappedChild.Height);
 				}
-
-				this.ContentWidth = wrappedChild.ContentWidth;
 			}
 		}
 

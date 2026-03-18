@@ -2,47 +2,40 @@
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
+using System;
 using Markdig.Syntax;
 using MatterHackers.Agg;
-using MatterHackers.Agg.Platform;
 using MatterHackers.Agg.UI;
-using MatterHackers.ImageProcessing;
+using MatterHackers.VectorMath;
 
 namespace Markdig.Renderers.Agg
 {
 	public class ListX : FlowLayoutWidget
 	{
-		public ListX()
+		public ListX(int depth)
 			: base(FlowDirection.TopToBottom)
 		{
 			this.VAnchor = VAnchor.Fit;
 			this.HAnchor = HAnchor.Stretch;
-		}
-
-		public override GuiWidget AddChild(GuiWidget childToAdd, int indexInChildrenList = -1)
-		{
-			if (childToAdd is TextWidget textWidget)
-			{
-				textWidget.TextColor = new Color("#036ac3");
-				textWidget.PointSize = 11;
-			}
-
-			return base.AddChild(childToAdd, indexInChildrenList);
+			this.Margin = new BorderDouble(left: depth * 14);
 		}
 	}
 
 	public class ListItemX : FlowLayoutWidget
 	{
-		private FlowLayoutWidget content;
-		public ListItemX(ThemeConfig theme)
+		private readonly FlowLayoutWidget content;
+
+		public ListItemX(ThemeConfig theme, string markerText)
 		{
 			this.VAnchor = VAnchor.Fit;
 			this.HAnchor = HAnchor.Stretch;
+			this.Margin = new BorderDouble(bottom: 3);
 
-			base.AddChild(new ImageWidget(StaticData.Instance.LoadIcon("bullet.png", 16, 16).GrayToColor(theme.TextColor))
+			base.AddChild(new TextWidget(markerText, pointSize: 11, textColor: theme.TextColor)
 			{
-				Margin = new BorderDouble(top: 1, left: 10),
+				Margin = new BorderDouble(right: 2),
 				VAnchor = VAnchor.Top,
+				MinimumSize = new Vector2(7, 0)
 			});
 
 			base.AddChild(content = new FlowLayoutWidget(FlowDirection.TopToBottom)
@@ -69,32 +62,42 @@ namespace Markdig.Renderers.Agg
 
 		protected override void Write(AggRenderer renderer, ListBlock listBlock)
 		{
-			//var list = new List();
+			var depth = GetListDepth(listBlock);
+			renderer.Push(new ListX(depth)); // list);
 
-			//if (listBlock.IsOrdered)
-			//{
-			//    list.MarkerStyle = TextMarkerStyle.Decimal;
-
-			//    if (listBlock.OrderedStart != null && (listBlock.DefaultOrderedStart != listBlock.OrderedStart))
-			//    {
-			//        list.StartIndex = int.Parse(listBlock.OrderedStart);
-			//    }
-			//}
-			//else
-			//{
-			//    list.MarkerStyle = TextMarkerStyle.Disc;
-			//}
-
-			renderer.Push(new ListX()); // list);
+			int orderedIndex = 1;
+			if (listBlock.IsOrdered && !string.IsNullOrWhiteSpace(listBlock.OrderedStart))
+			{
+				orderedIndex = Math.Max(1, int.Parse(listBlock.OrderedStart));
+			}
 
 			foreach (var item in listBlock)
 			{
-				renderer.Push(new ListItemX(theme));
+				var markerText = listBlock.IsOrdered ? $"{orderedIndex}." : "-";
+				renderer.Push(new ListItemX(theme, markerText));
 				renderer.WriteChildren(item as ListItemBlock);
 				renderer.Pop();
+				orderedIndex++;
 			}
 
 			renderer.Pop();
+		}
+
+		private static int GetListDepth(ListBlock listBlock)
+		{
+			int depth = 0;
+			var parent = listBlock.Parent;
+			while (parent != null)
+			{
+				if (parent is ListBlock)
+				{
+					depth++;
+				}
+
+				parent = parent.Parent;
+			}
+
+			return depth;
 		}
 	}
 }

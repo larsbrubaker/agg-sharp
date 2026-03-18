@@ -3,10 +3,22 @@
 // See the LICENSE.md file in the project root for more information.
 
 using Markdig.Syntax;
+using MatterHackers.Agg;
+using MatterHackers.Agg.UI;
 
 namespace Markdig.Renderers.Agg
 {
-	public class ThematicBreakX : AutoFit{ }
+	public class ThematicBreakX : FlowLayoutWidget
+	{
+		public ThematicBreakX(Color color)
+			: base(FlowDirection.TopToBottom)
+		{
+			HAnchor = HAnchor.Stretch;
+			VAnchor = VAnchor.Fit;
+			Margin = new BorderDouble(top: 6, bottom: 12);
+			AddChild(new HorizontalLine(color));
+		}
+	}
 
 	public class AggThematicBreakRenderer : AggObjectRenderer<ThematicBreakBlock>
     {
@@ -19,8 +31,7 @@ namespace Markdig.Renderers.Agg
             //{
             //    Inlines = { new InlineUIContainer(line) }
             //};
-
-			renderer.WriteBlock(new ThematicBreakX()); // paragraph);
+			renderer.WriteBlock(new ThematicBreakX(renderer.Theme.TextColor.WithAlpha(90))); // paragraph);
         }
     }
 }

@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\GuiAutomation\GuiAutomation.csproj" />
     <ProjectReference Include="..\..\ImageProcessing\ImageProcessing.csproj" />
     <ProjectReference Include="..\..\Localizations\Localizations.csproj" />
+    <ProjectReference Include="..\..\MarkdigAgg\MarkdigAgg.csproj" />
     <ProjectReference Include="..\..\PlatformWin32\PlatformWin32.csproj" />
     <ProjectReference Include="..\..\PolygonMesh\PolygonMesh.csproj" />
     <ProjectReference Include="..\..\QuadTree\QuadTree.csproj" />
