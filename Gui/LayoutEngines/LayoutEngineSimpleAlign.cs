@@ -1,5 +1,5 @@
-﻿/*
-Copyright (c) 2020, Lars Brubaker
+/*
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -94,6 +94,12 @@ namespace MatterHackers.Agg.UI
 							ApplyHAnchorToChild(parent, child);
 							ApplyVAnchorToChild(parent, child);
 						}
+					}
+
+					if (parent.IsSharedSizeScope && SharedSizeGroup.ApplySharedSizes(parent))
+					{
+						DoFitToChildrenHorizontal(parent, ref parentChangedSize);
+						DoFitToChildrenVertical(parent, ref parentChangedSize);
 					}
 				}
 			}

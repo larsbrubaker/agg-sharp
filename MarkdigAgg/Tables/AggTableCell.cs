@@ -1,5 +1,4 @@
-// Copyright (c) 2016-2017 Nicolas Musset. All rights reserved.
-// Copyright (c) 2022, John Lewin
+// Copyright (c) 2026, Nicolas Musset, John Lewin, Lars Brubaker
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
@@ -9,21 +8,15 @@ using MatterHackers.Agg.UI;
 
 namespace Markdig.Renderers.Agg
 {
-	// Parent container to restrict bounds
 	public class AggTableCell : GuiWidget
 	{
 		public AggTableCell()
 		{
-			// TODO: drive from column once width calculation is performed
 			Width = 300;
-
 			Height = 25;
-
-			// Use event rather than OnLayout as it only seems to produce the desired effect
 			this.Layout += AggTableCell_Layout;
 		}
 
-		// TODO: Investigate. Without this solution, child content is wrapped and clipped, leaving only the last text block visible
 		private void AggTableCell_Layout(object sender, EventArgs e)
 		{
 			if (this.Children.Count > 0 && this.Children.First() is FlowLeftRightWithWrapping wrappedChild)

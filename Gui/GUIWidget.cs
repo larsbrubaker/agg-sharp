@@ -965,6 +965,20 @@ namespace MatterHackers.Agg.UI
 			}
 		}
 
+		/// <summary>
+		/// The name of the shared size group this widget belongs to.
+		/// All visible widgets with the same group name within a SharedSizeScope
+		/// ancestor will be sized to the maximum width among them during layout.
+		/// </summary>
+		public string SharedSizeGroupName { get; set; }
+
+		/// <summary>
+		/// When true, this widget acts as the boundary for shared size groups.
+		/// During layout, all descendant widgets with SharedSizeGroupName set
+		/// are collected and equalized in width per group.
+		/// </summary>
+		public bool IsSharedSizeScope { get; set; }
+
 		public event EventHandler PositionChanged;
 
 		public virtual void OnPositionChanged(EventArgs e)

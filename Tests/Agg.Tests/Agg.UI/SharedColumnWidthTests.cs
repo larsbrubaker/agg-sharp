@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2026, Lars Brubaker, John Lewin
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -27,23 +27,48 @@ of the authors and should not be interpreted as representing official policies,
 either expressed or implied, of the FreeBSD Project.
 */
 
-namespace MatterHackers.Agg.UI
+using System.Threading.Tasks;
+using TUnit.Assertions;
+using TUnit.Assertions.Extensions;
+using TUnit.Core;
+
+namespace MatterHackers.Agg.UI.Tests
 {
-    public class FlowLayoutWidget : GuiWidget
-    {
-        private LayoutEngineFlow layoutEngine;
+	public class SharedColumnWidthTests
+	{
+		[Test]
+		public async Task SharedSizeGroup_EqualizesColumnWidths()
+		{
+			var scope = new FlowLayoutWidget(FlowDirection.TopToBottom)
+			{
+				IsSharedSizeScope = true,
+				Width = 600,
+				Height = 200,
+			};
 
-        public FlowLayoutWidget(FlowDirection direction = FlowDirection.LeftToRight)
-        {
-            this.HAnchor = HAnchor.Fit;
-            this.VAnchor = VAnchor.Fit;
-            this.LayoutEngine = layoutEngine = new LayoutEngineFlow(direction);
-        }
+			var row1 = new FlowLayoutWidget();
+			var cell1 = new GuiWidget { Width = 100, Height = 20, SharedSizeGroupName = "table_col_0" };
+			var cell2 = new GuiWidget { Width = 150, Height = 20, SharedSizeGroupName = "table_col_1" };
+			row1.AddChild(cell1);
+			row1.AddChild(cell2);
+			scope.AddChild(row1);
 
-        public FlowDirection FlowDirection
-        {
-            get => layoutEngine.FlowDirection;
-            set => layoutEngine.FlowDirection = value;
-        }
-    }
+			var row2 = new FlowLayoutWidget();
+			var cell3 = new GuiWidget { Width = 200, Height = 20, SharedSizeGroupName = "table_col_0" };
+			var cell4 = new GuiWidget { Width = 80, Height = 20, SharedSizeGroupName = "table_col_1" };
+			row2.AddChild(cell3);
+			row2.AddChild(cell4);
+			scope.AddChild(row2);
+
+			scope.PerformLayout();
+
+			// Column 0: max(100, 200) = 200
+			await Assert.That(cell1.Width).IsEqualTo(200);
+			await Assert.That(cell3.Width).IsEqualTo(200);
+
+			// Column 1: max(150, 80) = 150
+			await Assert.That(cell2.Width).IsEqualTo(150);
+			await Assert.That(cell4.Width).IsEqualTo(150);
+		}
+	}
 }

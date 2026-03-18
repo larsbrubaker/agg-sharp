@@ -1,5 +1,4 @@
-﻿// Copyright (c) Nicolas Musset. All rights reserved.
-// Copyright (c) 2022, John Lewin
+// Copyright (c) 2026, Nicolas Musset, John Lewin, Lars Brubaker
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
@@ -29,24 +28,8 @@ namespace Markdig.Renderers.Agg
 				return;
 			}
 
-			// TODO: Column/cell width theortically is:
-			//
-			//  Case A. Expanding to the maximum content width of cells in column to grow each
-			//          cell to a minimum value.
-			//
-			//  Case B. Contracting when the aggregate column widths exceed the bounds
-			//     of the parent container.
-			//
-			//  Case C. Distributing percentages across fixed bounds of the parent container
-			//
-			//  Other cases...
-
-			// This block attempts to implement Case A by finding the max content width per cells in each column
-			//
-			// Collect max content widths from each cell in this column
 			double maxCellWidth = this.Cells.Select(c => c.ContentWidth).Max() + cellPadding * 2;
 
-			// Apply max width to cells in this column
 			foreach (var cell in this.Cells)
 			{
 				if (cell.Width != maxCellWidth)

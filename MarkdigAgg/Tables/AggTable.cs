@@ -1,5 +1,4 @@
-// Copyright (c) Nicolas Musset. All rights reserved.
-// Copyright (c) 2026, Lars Brubaker, John Lewin
+// Copyright (c) 2026, Nicolas Musset, John Lewin, Lars Brubaker
 // This file is licensed under the MIT license.
 // See the LICENSE.md file in the project root for more information.
 
