@@ -57,7 +57,6 @@
     <ProjectReference Include="..\..\Csg\Csg.csproj" />
     <ProjectReference Include="..\..\DataConverters2D\DataConverters2D.csproj" />
     <ProjectReference Include="..\..\DataConverters3D\DataConverters3D.csproj" />
-    <ProjectReference Include="..\..\Glfw\GlfwProvider.csproj" />
     <ProjectReference Include="..\..\Gui\Gui.csproj" />
     <ProjectReference Include="..\..\Localizations\Localizations.csproj" />
     <ProjectReference Include="..\..\PlatformWin32\PlatformWin32.csproj" />

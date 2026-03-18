@@ -222,16 +222,7 @@ namespace MatterHackers.MeshVisualizer
 		[STAThread]
 		public static void Main(string[] args)
 		{
-			// Force OpenGL
-			var Glfw = false;
-			if (Glfw)
-			{
-				AggContext.Config.ProviderTypes.SystemWindowProvider = "MatterHackers.GlfwProvider.GlfwWindowProvider, MatterHackers.GlfwProvider";
-			}
-			else
-			{
-				AggContext.Config.ProviderTypes.SystemWindowProvider = "MatterHackers.Agg.UI.OpenGLWinformsWindowProvider, agg_platform_win32";
-			}
+			AggContext.Config.ProviderTypes.SystemWindowProvider = "MatterHackers.Agg.UI.OpenGLWinformsWindowProvider, agg_platform_win32";
 
 			var downloadsDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
