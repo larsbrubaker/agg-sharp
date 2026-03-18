@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright(c) 2024, Lars Brubaker, John Lewin
 All rights reserved.
 
@@ -41,6 +41,7 @@ namespace Markdig.Renderers.Agg.Inlines
     public class ImageLinkSimpleX : FlowLayoutWidget
 	{
 		private static ImageBuffer icon = StaticData.Instance.LoadIcon("internet.png", 16, 16);
+		private string resolvedImageUrl;
 
 		public ImageLinkSimpleX(AggRenderer renderer, string imageUrl, string linkUrl = null)
 		{
@@ -111,7 +112,16 @@ namespace Markdig.Renderers.Agg.Inlines
 		{
 			if (!hasBeenLoaded)
 			{
-				if (ImageUrl.StartsWith("http"))
+				if (aggRenderer.RootWidget.Parents<MarkdownWidget>().FirstOrDefault() is MarkdownWidget markdownWidget)
+				{
+					resolvedImageUrl = markdownWidget.ResolveImageSource(ImageUrl);
+				}
+				else
+				{
+					resolvedImageUrl = ImageUrl;
+				}
+
+				if (!string.IsNullOrWhiteSpace(resolvedImageUrl))
 				{
 #if DEBUG
 					if (MarkdownWidget.RetrieveImageSquenceAsync == null)
@@ -119,7 +129,7 @@ namespace Markdig.Renderers.Agg.Inlines
                         throw new Exception("You must set the RetrieveImageSquenceAsync action to retrieve an image.");
                     }
 #endif
-                    MarkdownWidget.RetrieveImageSquenceAsync?.Invoke(sequenceWidget.ImageSequence, ImageUrl, null);
+                    MarkdownWidget.RetrieveImageSquenceAsync?.Invoke(sequenceWidget.ImageSequence, resolvedImageUrl, null);
 				}
 
 				hasBeenLoaded = true;

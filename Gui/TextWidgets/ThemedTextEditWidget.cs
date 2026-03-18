@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright (c) 2022, Lars Brubaker
 All rights reserved.
 
@@ -196,6 +196,11 @@ namespace MatterHackers.Agg.UI
 		{
 			ActualTextEditWidget.Printer.DrawFromHintedCache = true;
 			ActualTextEditWidget.DoubleBuffer = false;
+		}
+
+		public void SetTextAsUndoBaseline(string text, int charIndex = 0)
+		{
+			ActualTextEditWidget.SetTextAsUndoBaseline(text, charIndex);
 		}
 
 		public override void Focus()

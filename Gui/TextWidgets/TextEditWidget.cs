@@ -106,6 +106,12 @@ namespace MatterHackers.Agg.UI
 			InternalTextEditWidget.ClearUndoHistory();
 		}
 
+		public void SetTextAsUndoBaseline(string text, int charIndex = 0)
+		{
+			InternalTextEditWidget.SetTextAsUndoBaseline(text, charIndex);
+			TopLeftOffset = VectorMath.Vector2.Zero;
+		}
+
 		public Color HighlightColor
 		{
 			get

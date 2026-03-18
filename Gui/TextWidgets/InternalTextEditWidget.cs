@@ -1,5 +1,5 @@
-﻿/*
-Copyright (c) 2014, Lars Brubaker
+/*
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -246,9 +246,57 @@ namespace MatterHackers.Agg.UI
 
         public void SetActualTextAndUpdate(string text)
         {
-            actualText = text;
+			actualText = NormalizeLineEndings(text);
             UpdateDisplayText();
         }
+
+		private static string NormalizeLineEndings(string text)
+		{
+			return string.IsNullOrEmpty(text)
+				? ""
+				: text.Replace("\r\n", "\n").Replace('\r', '\n');
+		}
+
+		private static string NormalizeLineEndings(string text, int charIndex, out int normalizedCharIndex)
+		{
+			if (string.IsNullOrEmpty(text))
+			{
+				normalizedCharIndex = 0;
+				return "";
+			}
+
+			int rawLimit = Math.Max(0, Math.Min(charIndex, text.Length));
+			int normalizedIndex = 0;
+			var builder = new StringBuilder(text.Length);
+
+			for (int i = 0; i < text.Length; i++)
+			{
+				if (text[i] == '\r')
+				{
+					builder.Append('\n');
+					if (i < rawLimit)
+					{
+						normalizedIndex++;
+					}
+
+					if (i + 1 < text.Length && text[i + 1] == '\n')
+					{
+						i++;
+					}
+				}
+				else
+				{
+					builder.Append(text[i]);
+					if (i < rawLimit)
+					{
+						normalizedIndex++;
+					}
+				}
+			}
+
+			normalizedCharIndex = normalizedIndex;
+			return builder.ToString();
+		}
 
         private void UpdateDisplayText()
         {
@@ -307,10 +355,11 @@ namespace MatterHackers.Agg.UI
             get => actualText;
             set
             {
-                if (actualText != value)
+				var normalizedText = NormalizeLineEndings(value);
+                if (actualText != normalizedText)
                 {
                     CharIndexToInsertBefore = 0;
-                    actualText = value ?? "";
+                    actualText = normalizedText;
                     UpdateDisplayText();
                     OnTextChanged(null);
                     Invalidate();
@@ -330,7 +379,7 @@ namespace MatterHackers.Agg.UI
             TabStop = true;
             MergeTypingDuringUndo = true;
 
-            actualText = text ?? "";
+            actualText = NormalizeLineEndings(text);
             internalTextWidget = new TextWidget("", pointSize: pointSize, ellipsisIfClipped: false, textColor: _textColor, typeFace: typeFace);
             internalTextWidget.Selectable = false;
             internalTextWidget.AutoExpandBoundsToText = true;
@@ -1201,10 +1250,14 @@ namespace MatterHackers.Agg.UI
                 {
                     stringOnClipboard = Regex.Replace(stringOnClipboard, @"\r\n?|\n", " ");
                 }
+				else
+				{
+					stringOnClipboard = NormalizeLineEndings(stringOnClipboard);
+				}
 
                 stringBuilder.Insert(CharIndexToInsertBefore, stringOnClipboard);
                 CharIndexToInsertBefore += stringOnClipboard.Length;
-                actualText = stringBuilder.ToString();
+                actualText = NormalizeLineEndings(stringBuilder.ToString());
                 UpdateDisplayText();
 
                 var newUndoCommand = new TextWidgetUndoCommand(this);
@@ -1521,6 +1574,24 @@ namespace MatterHackers.Agg.UI
 			undoBuffer.ClearHistory();
 			var newUndoData = new TextWidgetUndoCommand(this);
 			undoBuffer.Add(newUndoData);
+		}
+
+		public void SetTextAsUndoBaseline(string text, int charIndex = 0)
+		{
+			actualText = NormalizeLineEndings(text, charIndex, out int normalizedCharIndex);
+			UpdateDisplayText();
+			OnTextChanged(null);
+			SetCursorPosition(normalizedCharIndex);
+			ClearUndoHistory();
+			Invalidate();
+		}
+
+		public void SetCursorPosition(int charIndex)
+		{
+			CharIndexToInsertBefore = Math.Max(0, Math.Min(charIndex, Text.Length));
+			SelectionIndexToStartBefore = CharIndexToInsertBefore;
+			Selecting = false;
+			FixBarPosition(DesiredXPositionOnLine.Set);
 		}
 	}
 }

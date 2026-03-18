@@ -1,5 +1,5 @@
-﻿/*
-Copyright(c) 2025, Lars Brubaker, John Lewin
+/*
+Copyright(c) 2026, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -55,6 +55,7 @@ namespace Markdig.Agg
 		public static Action<ImageSequence, string, Action> RetrieveImageSquenceAsync;
         // string uriToLoad, Action<string> updateResult, bool addToAppCache = true, Action<HttpRequestMessage> addHeaders = null
 		public static Action<string, Action<string>, bool, Action<HttpRequestMessage>> RetrieveText;
+		public static Func<string, string> ResolveAssetUrl { get; set; }
 
         public MarkdownWidget(ThemeConfig theme, string contentUri, bool scrollContent = true)
 			: this(theme, scrollContent)
@@ -142,12 +143,53 @@ namespace Markdig.Agg
             }
         }
 
+		public string ResolveImageSource(string uri)
+		{
+			if (string.IsNullOrWhiteSpace(uri))
+			{
+				return uri;
+			}
+
+			var remappedUri = ResolveAssetUrl?.Invoke(uri);
+			if (!string.IsNullOrWhiteSpace(remappedUri))
+			{
+				return remappedUri;
+			}
+
+			if (uri.StartsWith("Docs/Help") || uri.StartsWith("Docs\\Help"))
+			{
+				return Path.Combine(StaticData.RootPath, uri);
+			}
+
+			if (pathHandler != null
+				&& !Uri.TryCreate(uri, UriKind.Absolute, out _))
+			{
+				try
+				{
+					return pathHandler.ResolvePath(uri);
+				}
+				catch
+				{
+				}
+			}
+
+			return uri;
+		}
+
+		public void SetContentUri(string contentUri)
+		{
+			if (!string.IsNullOrWhiteSpace(contentUri))
+			{
+				pathHandler = new MarkdownPathHandler(contentUri);
+			}
+		}
+
         /// <summary>
         /// Strips YAML frontmatter from markdown content if present
         /// </summary>
         /// <param name="content">The markdown content that may contain frontmatter</param>
         /// <returns>The markdown content without frontmatter</returns>
-        private static string StripFrontmatter(string content)
+        public static string StripFrontmatter(string content)
         {
             if (string.IsNullOrEmpty(content))
             {
