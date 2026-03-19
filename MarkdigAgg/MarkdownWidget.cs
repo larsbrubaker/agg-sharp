@@ -59,6 +59,12 @@ namespace Markdig.Agg
 		private string _markDownText = null;
 		public static ThemeConfig Theme { get; private set; }
 
+		/// <summary>
+		/// Fired when a relative link is navigated within the markdown content.
+		/// The string argument is the resolved full file path that was loaded.
+		/// </summary>
+		public event EventHandler<string> UriNavigated;
+
 		public static Action<string> LaunchBrowser { get; set; }
 
 		// ImageSequence imageSequenceToLoadInto, string uriToLoad, Action doneLoading = null
@@ -157,6 +163,7 @@ namespace Markdig.Agg
 					UiThread.RunOnIdle(() =>
 					{
 						this.Markdown = markDown;
+						UriNavigated?.Invoke(this, fullPath);
 					});
 				}
 			}
@@ -203,7 +210,12 @@ namespace Markdig.Agg
 		{
 			if (!string.IsNullOrWhiteSpace(contentUri))
 			{
-				pathHandler = new MarkdownPathHandler(contentUri);
+				// Use the directory containing the file as the base path so relative links resolve correctly.
+				// If contentUri is already a directory, GetDirectoryName returns the parent, so check first.
+				var directory = File.Exists(contentUri)
+					? Path.GetDirectoryName(contentUri)
+					: contentUri;
+				pathHandler = new MarkdownPathHandler(directory);
 			}
 		}
 
