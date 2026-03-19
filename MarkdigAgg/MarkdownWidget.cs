@@ -594,9 +594,19 @@ namespace Markdig.Agg
 			{
 				var child = children[i];
 				html.Append(RenderSelectionNode(child, selectionStart, selectionEnd, renderWholeNode));
-				if (i + 1 < children.Count)
+             if (i + 1 < children.Count)
 				{
-					html.Append(RenderSeparatorBetweenChildren(children[i], children[i + 1], selectionStart, selectionEnd, renderWholeNode));
+                   var nextTextSiblingIndex = i + 1;
+					while (nextTextSiblingIndex < children.Count
+						&& children[nextTextSiblingIndex].DescendantsAndSelf<MarkdownTextWidget>().FirstOrDefault() == null)
+					{
+						nextTextSiblingIndex++;
+					}
+
+					if (nextTextSiblingIndex < children.Count)
+					{
+						html.Append(RenderSeparatorBetweenChildren(children[i], children[nextTextSiblingIndex], selectionStart, selectionEnd, renderWholeNode));
+					}
 				}
 			}
 
@@ -608,6 +618,11 @@ namespace Markdig.Agg
 			var currentLastText = currentChild.DescendantsAndSelf<MarkdownTextWidget>().LastOrDefault();
 			var nextFirstText = nextChild.DescendantsAndSelf<MarkdownTextWidget>().FirstOrDefault();
 			if (currentLastText == null || nextFirstText == null)
+			{
+				return string.Empty;
+			}
+
+			if (StartsOrEndsWithWhitespace(currentLastText, nextFirstText))
 			{
 				return string.Empty;
 			}
@@ -633,6 +648,25 @@ namespace Markdig.Agg
 			}
 
 			return EscapeHtml(currentLastText.TrailingText.Substring(separatorOffset, separatorLength));
+		}
+
+		private static bool StartsOrEndsWithWhitespace(MarkdownTextWidget currentLastText, MarkdownTextWidget nextFirstText)
+		{
+			var currentText = currentLastText.Text;
+			if (!string.IsNullOrEmpty(currentText)
+				&& char.IsWhiteSpace(currentText[currentText.Length - 1]))
+			{
+				return true;
+			}
+
+			var nextText = nextFirstText.Text;
+			if (!string.IsNullOrEmpty(nextText)
+				&& char.IsWhiteSpace(nextText[0]))
+			{
+				return true;
+			}
+
+			return false;
 		}
 
 		private string RenderSelectedText(MarkdownTextWidget textWidget, int selectionStart, int selectionEnd, bool renderWholeNode)
