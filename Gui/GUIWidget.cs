@@ -4,7 +4,7 @@
 //
 // C# port by: Lars Brubaker
 //                  larsbrubaker@gmail.com
-// Copyright (C) 2022
+// Copyright (C) 2026 Lars Brubaker
 //
 // Permission to copy, use, modify, sell and distribute this software
 // is granted provided this copyright notice appears in all copies.
@@ -769,6 +769,8 @@ namespace MatterHackers.Agg.UI
 		{
 			return $"Name = {Name}, Bounds = {LocalBounds} - {GetType().Name}";
 		}
+
+		public static event Action<GuiWidget, string, MouseEventArgs> InteractionObserved;
 
 		public AscendableSafeList<GuiWidget> Children { get; }
 
@@ -2830,6 +2832,15 @@ namespace MatterHackers.Agg.UI
 					}
 				}
 
+				try
+				{
+					InteractionObserved?.Invoke(this, "mouse-down", mouseEvent);
+				}
+				catch (Exception ex)
+				{
+					Debug.WriteLine($"Interaction observer failed during mouse down: {ex}");
+				}
+
 				MouseDown?.Invoke(this, mouseEvent);
 			}
 
@@ -3290,6 +3301,15 @@ namespace MatterHackers.Agg.UI
 
 		protected virtual void OnClick(MouseEventArgs mouseEvent)
 		{
+			try
+			{
+				InteractionObserved?.Invoke(this, "click", mouseEvent);
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Interaction observer failed during click: {ex}");
+			}
+
 			Click?.Invoke(this, mouseEvent);
 		}
 
@@ -3305,6 +3325,16 @@ namespace MatterHackers.Agg.UI
 		public virtual void OnMouseEnter(MouseEventArgs mouseEvent)
 		{
 			SetCursor(Cursor);
+
+			try
+			{
+				InteractionObserved?.Invoke(this, "hover", mouseEvent);
+			}
+			catch (Exception ex)
+			{
+				Debug.WriteLine($"Interaction observer failed during hover: {ex}");
+			}
+
 			MouseEnter?.Invoke(this, mouseEvent);
 		}
 
