@@ -51,6 +51,11 @@ namespace MatterHackers.RenderGl
 		private ID3D11RenderTargetView renderTargetView;
 		private ID3D11Texture2D currentBackBuffer;
 		private ID3D11Texture2D mainRenderTarget;
+
+		/// <summary>
+		/// The main render target texture. Used for off-screen pixel readback.
+		/// </summary>
+		public ID3D11Texture2D MainRenderTarget => mainRenderTarget;
 		private ID3D11DepthStencilView depthStencilView;
 		private ID3D11Texture2D depthStencilBuffer;
 
@@ -252,6 +257,8 @@ namespace MatterHackers.RenderGl
 			this.device = device;
 			this.context = context;
 			this.swapChain = swapChain;
+			this.offscreenWidth = 0;
+			this.offscreenHeight = 0;
 
 			CreateRenderTarget();
 			CreateShaders();
@@ -261,10 +268,52 @@ namespace MatterHackers.RenderGl
 			CreateLightBuffer();
 		}
 
+		/// <summary>
+		/// Initializes for off-screen rendering without a swap chain or window.
+		/// </summary>
+		public void InitializeOffscreen(ID3D11Device device, ID3D11DeviceContext context, int width, int height)
+		{
+			this.device = device;
+			this.context = context;
+			this.swapChain = null;
+			this.offscreenWidth = width;
+			this.offscreenHeight = height;
+
+			CreateRenderTarget();
+			CreateShaders();
+			CreateStates();
+			CreateDynamicVertexBuffer();
+			CreateTransformBuffer();
+			CreateLightBuffer();
+		}
+
+		private int offscreenWidth;
+		private int offscreenHeight;
+
 		private void CreateRenderTarget()
 		{
 			currentBackBuffer?.Dispose();
-			currentBackBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
+
+			if (swapChain != null)
+			{
+				currentBackBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
+			}
+			else
+			{
+				// Off-screen mode: create a standalone backbuffer texture
+				currentBackBuffer = device.CreateTexture2D(new Texture2DDescription
+				{
+					Width = (uint)offscreenWidth,
+					Height = (uint)offscreenHeight,
+					MipLevels = 1,
+					ArraySize = 1,
+					Format = Format.B8G8R8A8_UNorm,
+					SampleDescription = new SampleDescription(1, 0),
+					Usage = ResourceUsage.Default,
+					BindFlags = BindFlags.RenderTarget,
+				});
+			}
+
 			renderTargetHeight = (int)currentBackBuffer.Description.Height;
 
 			mainRenderTarget?.Dispose();
@@ -308,7 +357,15 @@ namespace MatterHackers.RenderGl
 			depthStencilView?.Dispose();
 			depthStencilBuffer?.Dispose();
 
-			swapChain.ResizeBuffers(0, (uint)width, (uint)height, Format.Unknown, SwapChainFlags.None);
+			if (swapChain != null)
+			{
+				swapChain.ResizeBuffers(0, (uint)width, (uint)height, Format.Unknown, SwapChainFlags.None);
+			}
+			else
+			{
+				offscreenWidth = width;
+				offscreenHeight = height;
+			}
 
 			CreateRenderTarget();
 		}
@@ -2818,11 +2875,15 @@ namespace MatterHackers.RenderGl
 				context.CopyResource(currentBackBuffer, mainRenderTarget);
 			}
 
-			swapChain.Present(0, PresentFlags.None);
+			if (swapChain != null)
+			{
+				swapChain.Present(0, PresentFlags.None);
 
-			// With FlipDiscard, the back buffer changes after Present.
-			currentBackBuffer?.Dispose();
-			currentBackBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
+				// With FlipDiscard, the back buffer changes after Present.
+				currentBackBuffer?.Dispose();
+				currentBackBuffer = swapChain.GetBuffer<ID3D11Texture2D>(0);
+			}
+
 			// renderTargetView points to mainRenderTarget (stable), not the swapchain backbuffer
 			context.OMSetRenderTargets(renderTargetView, depthStencilView);
 		}
