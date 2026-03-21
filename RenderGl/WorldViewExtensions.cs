@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2019, Lars Brubaker, John Lewin
+Copyright (c) 2026, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -54,12 +54,12 @@ namespace MatterHackers.RenderGl
 			return frustum2;
 		}
 
-		public static void RenderPlane(this WorldView world, Plane plane, Color color, bool doDepthTest, double rectSize, double lineWidth)
+		public static void RenderPlane(this WorldView world, GL gl, Plane plane, Color color, bool doDepthTest, double rectSize, double lineWidth)
 		{
-			world.RenderPlane(plane.Normal * plane.DistanceFromOrigin, plane.Normal, color, doDepthTest, rectSize, lineWidth);
+			world.RenderPlane(gl, plane.Normal * plane.DistanceFromOrigin, plane.Normal, color, doDepthTest, rectSize, lineWidth);
 		}
 
-		public static void RenderPlane(this WorldView world, Vector3 position, Vector3 normal, Color color, bool doDepthTest, double rectSize, double lineWidth)
+		public static void RenderPlane(this WorldView world, GL gl, Vector3 position, Vector3 normal, Color color, bool doDepthTest, double rectSize, double lineWidth)
 		{
 			var clipping = world.GetClippingFrustum();
 			// get any perpendicular to the normal (we call it x to make it clear where to apply it)
@@ -67,13 +67,13 @@ namespace MatterHackers.RenderGl
 			// get a second perpendicular that is perpendicular to both
 			var perpendicularY = Vector3.GetPerpendicular(normal, perpendicularX).GetNormal() * rectSize;
 			// the top line
-			world.Render3DLine(clipping, position - perpendicularX + perpendicularY, position + perpendicularX + perpendicularY, color, doDepthTest, lineWidth);
+			world.Render3DLine(gl, clipping, position - perpendicularX + perpendicularY, position + perpendicularX + perpendicularY, color, doDepthTest, lineWidth);
 			// the bottom line
-			world.Render3DLine(clipping, position - perpendicularX - perpendicularY, position + perpendicularX - perpendicularY, color, doDepthTest, lineWidth);
+			world.Render3DLine(gl, clipping, position - perpendicularX - perpendicularY, position + perpendicularX - perpendicularY, color, doDepthTest, lineWidth);
 			// the left line
-			world.Render3DLine(clipping, position - perpendicularX - perpendicularY, position - perpendicularX + perpendicularY, color, doDepthTest, lineWidth);
+			world.Render3DLine(gl, clipping, position - perpendicularX - perpendicularY, position - perpendicularX + perpendicularY, color, doDepthTest, lineWidth);
 			// the right line
-			world.Render3DLine(clipping, position + perpendicularX - perpendicularY, position + perpendicularX + perpendicularY, color, doDepthTest, lineWidth);
+			world.Render3DLine(gl, clipping, position + perpendicularX - perpendicularY, position + perpendicularX + perpendicularY, color, doDepthTest, lineWidth);
 		}
 
 		/// <summary>
@@ -81,20 +81,22 @@ namespace MatterHackers.RenderGl
 		/// If drawing lots of lines call with a pre-calculated clipping frustum.
 		/// </summary>
 		/// <param name="world"></param>
+		/// <param name="gl"></param>
 		/// <param name="start"></param>
 		/// <param name="end"></param>
 		/// <param name="color"></param>
 		/// <param name="doDepthTest"></param>
 		/// <param name="width"></param>
-		public static void Render3DLine(this WorldView world, Vector3 start, Vector3 end, Color color, bool doDepthTest = true, double width = 1, bool startArrow = false, bool endArrow = false)
+		public static void Render3DLine(this WorldView world, GL gl, Vector3 start, Vector3 end, Color color, bool doDepthTest = true, double width = 1, bool startArrow = false, bool endArrow = false)
 		{
-			world.Render3DLine(world.GetClippingFrustum(), start, end, color, doDepthTest, width, startArrow, endArrow);
+			world.Render3DLine(gl, world.GetClippingFrustum(), start, end, color, doDepthTest, width, startArrow, endArrow);
 		}
 
 		/// <summary>
 		/// Draw a line in the scene in 3D but scale it such that it appears as a 2D line in the view.
 		/// </summary>
 		/// <param name="world"></param>
+		/// <param name="gl"></param>
 		/// <param name="clippingFrustum">This is a cache of the frustum from world.
 		/// Much faster to pass this way if drawing lots of lines.</param>
 		/// <param name="start"></param>
@@ -102,15 +104,16 @@ namespace MatterHackers.RenderGl
 		/// <param name="color"></param>
 		/// <param name="doDepthTest"></param>
 		/// <param name="width"></param>
-		public static void Render3DLine(this WorldView world, Frustum clippingFrustum, Vector3 start, Vector3 end, Color color, bool doDepthTest = true, double width = 1, bool startArrow = false, bool endArrow = false)
+		public static void Render3DLine(this WorldView world, GL gl, Frustum clippingFrustum, Vector3 start, Vector3 end, Color color, bool doDepthTest = true, double width = 1, bool startArrow = false, bool endArrow = false)
 		{
-			GL.PushAttrib(AttribMask.EnableBit);
-			RenderHelper.PrepareFor3DLineRender(doDepthTest);
-			world.Render3DLineNoPrep(clippingFrustum, start, end, color, width, startArrow, endArrow);
-			GL.PopAttrib();
+			gl.PushAttrib(AttribMask.EnableBit);
+			RenderHelper.PrepareFor3DLineRender(gl, doDepthTest);
+			world.Render3DLineNoPrep(gl, clippingFrustum, start, end, color, width, startArrow, endArrow);
+			gl.PopAttrib();
 		}
 
 		public static void Render3DLineNoPrep(this WorldView world,
+			GL gl,
 			Frustum clippingFrustum,
 			Vector3Float start,
 			Vector3Float end,
@@ -119,10 +122,11 @@ namespace MatterHackers.RenderGl
 			bool startArrow = false,
 			bool endArrow = false)
 		{
-			world.Render3DLineNoPrep(clippingFrustum, new Vector3(start), new Vector3(end), new Color(color), width, startArrow, endArrow);
+			world.Render3DLineNoPrep(gl, clippingFrustum, new Vector3(start), new Vector3(end), new Color(color), width, startArrow, endArrow);
 		}
 
 		public static void Render3DLineNoPrep(this WorldView world,
+			GL gl,
 			Frustum clippingFrustum,
 			Vector3 start,
 			Vector3 end,
@@ -180,7 +184,7 @@ namespace MatterHackers.RenderGl
 				// When the D3D scene pipeline is active, create a fresh mesh with baked
 				// world-space vertices and route it through the same pipeline as other
 				// control geometry (opaque or overlay depending on current depth test state).
-				if (GL.Instance is INativeSceneRenderer nativeSceneRenderer
+				if (gl?.GpuContext is INativeSceneRenderer nativeSceneRenderer
 					&& nativeSceneRenderer.IsSceneRenderingActive)
 				{
 					var lineMesh = CreateTransformedLineMesh(lineTransform);
@@ -190,43 +194,43 @@ namespace MatterHackers.RenderGl
 						AppendArrowHeads(lineMesh, start, end, startScale, normal, arrowWidth, arrowLength, startArrow, endArrow);
 					}
 
-					RenderHelper.Render(lineMesh, color, Matrix4X4.Identity, RenderTypes.Shaded, forceCullBackFaces: false);
+					RenderHelper.Render(gl, lineMesh, color, Matrix4X4.Identity, RenderTypes.Shaded, forceCullBackFaces: false);
 					return;
 				}
 
 				// GL compat fallback: render the line mesh directly
-				GL.Color4(color.Red0To255, color.Green0To255, color.Blue0To255, color.Alpha0To255);
-				GL.Enable(EnableCap.Blend);
+				gl.Color4(color.Red0To255, color.Green0To255, color.Blue0To255, color.Alpha0To255);
+				gl.Enable(EnableCap.Blend);
 
-				GL.MatrixMode(MatrixMode.Modelview);
-				GL.PushMatrix();
-				GL.MultMatrix(lineTransform.GetAsFloatArray());
+				gl.MatrixMode(MatrixMode.Modelview);
+				gl.PushMatrix();
+				gl.MultMatrix(lineTransform.GetAsFloatArray());
 
-				GL.Begin(BeginMode.Triangles);
+				gl.Begin(BeginMode.Triangles);
 				for (int faceIndex = 0; faceIndex < scaledLineMesh.Faces.Count; faceIndex++)
 				{
 					var face = scaledLineMesh.Faces[faceIndex];
 					var vertices = scaledLineMesh.Vertices;
 					var position = vertices[face.v0];
-					GL.Vertex3(position.X, position.Y, position.Z);
+					gl.Vertex3(position.X, position.Y, position.Z);
 					position = vertices[face.v1];
-					GL.Vertex3(position.X, position.Y, position.Z);
+					gl.Vertex3(position.X, position.Y, position.Z);
 					position = vertices[face.v2];
-					GL.Vertex3(position.X, position.Y, position.Z);
+					gl.Vertex3(position.X, position.Y, position.Z);
 				}
-				GL.End();
+				gl.End();
 
-				GL.PopMatrix();
+				gl.PopMatrix();
 
 				// render the arrows if any
 				if (startArrow)
 				{
-					RenderHead(start, startScale, normal, arrowWidth, arrowLength, false);
+					RenderHead(gl, start, startScale, normal, arrowWidth, arrowLength, false);
 				}
 
 				if (endArrow)
 				{
-					RenderHead(end, startScale, normal, arrowWidth, arrowLength, true);
+					RenderHead(gl, end, startScale, normal, arrowWidth, arrowLength, true);
 				}
 			}
 		}
@@ -303,7 +307,7 @@ namespace MatterHackers.RenderGl
 			}
 		}
 
-		private static void RenderHead(Vector3 basePos, double startScale, Vector3 normal, double arrowWidth, double arrowLength, bool invert)
+		private static void RenderHead(GL gl, Vector3 basePos, double startScale, Vector3 normal, double arrowWidth, double arrowLength, bool invert)
 		{
 			if (invert)
 			{
@@ -315,31 +319,31 @@ namespace MatterHackers.RenderGl
 			var rotation = Matrix4X4.CreateRotation(normal, MathHelper.Tau / sides);
 			var offset = perpendicular * arrowWidth * startScale;
 			var tipPos = basePos + (normal * arrowLength * startScale);
-			GL.Begin(BeginMode.Triangles);
+			gl.Begin(BeginMode.Triangles);
 			for (int side = 0; side < sides; side++)
 			{
 				var rotated = offset.Transform(rotation);
-				GL.Vertex3(basePos + offset);
-				GL.Vertex3(tipPos);
-				GL.Vertex3(basePos + rotated);
+				gl.Vertex3(basePos + offset);
+				gl.Vertex3(tipPos);
+				gl.Vertex3(basePos + rotated);
 
-				GL.Vertex3(basePos);
-				GL.Vertex3(basePos + offset);
-				GL.Vertex3(basePos + rotated);
+				gl.Vertex3(basePos);
+				gl.Vertex3(basePos + offset);
+				gl.Vertex3(basePos + rotated);
 
 				offset = rotated;
 			}
-			GL.End();
+			gl.End();
 		}
 
-		public static void RenderCylinderOutline(this WorldView world, Matrix4X4 worldMatrix, Vector3 center, double diameter, double height, int sides, Color color, double lineWidth = 1, double extendLineLength = 0)
+		public static void RenderCylinderOutline(this WorldView world, GL gl, Matrix4X4 worldMatrix, Vector3 center, double diameter, double height, int sides, Color color, double lineWidth = 1, double extendLineLength = 0)
 		{
-			world.RenderCylinderOutline(worldMatrix, center, diameter, height, sides, color, color, lineWidth, extendLineLength);
+			world.RenderCylinderOutline(gl, worldMatrix, center, diameter, height, sides, color, color, lineWidth, extendLineLength);
 		}
 
-		public static void RenderCylinderOutline(this WorldView world, Matrix4X4 worldMatrix, Vector3 center, double diameter, double height, int sides, Color topBottomRingColor, Color sideLinesColor, double lineWidth = 1, double extendLineLength = 0, double phase = 0)
+		public static void RenderCylinderOutline(this WorldView world, GL gl, Matrix4X4 worldMatrix, Vector3 center, double diameter, double height, int sides, Color topBottomRingColor, Color sideLinesColor, double lineWidth = 1, double extendLineLength = 0, double phase = 0)
 		{
-			RenderHelper.PrepareFor3DLineRender(true);
+			RenderHelper.PrepareFor3DLineRender(gl, true);
 			Frustum frustum = world.GetClippingFrustum();
 
 			for (int i = 0; i < sides; i++)
@@ -362,18 +366,19 @@ namespace MatterHackers.RenderGl
 
 				if (sideLinesColor != Color.Transparent)
 				{
-					world.Render3DLineNoPrep(frustum, sideTop, sideBottom, sideLinesColor, lineWidth);
+					world.Render3DLineNoPrep(gl, frustum, sideTop, sideBottom, sideLinesColor, lineWidth);
 				}
 
 				if (topBottomRingColor != Color.Transparent)
 				{
-					world.Render3DLineNoPrep(frustum, topStart, topEnd, topBottomRingColor, lineWidth);
-					world.Render3DLineNoPrep(frustum, bottomStart, bottomEnd, topBottomRingColor, lineWidth);
+					world.Render3DLineNoPrep(gl, frustum, topStart, topEnd, topBottomRingColor, lineWidth);
+					world.Render3DLineNoPrep(gl, frustum, bottomStart, bottomEnd, topBottomRingColor, lineWidth);
 				}
 			}
 		}
 
 		public static void RenderRing(this WorldView world,
+			GL gl,
 			Matrix4X4 worldMatrix,
 			Vector3 center,
 			double diameter,
@@ -383,7 +388,7 @@ namespace MatterHackers.RenderGl
 			double phase = 0,
 			bool zBuffered = true)
 		{
-			RenderHelper.PrepareFor3DLineRender(zBuffered);
+			RenderHelper.PrepareFor3DLineRender(gl, zBuffered);
 			Frustum frustum = world.GetClippingFrustum();
 
 			for (int i = 0; i < sides; i++)
@@ -399,17 +404,17 @@ namespace MatterHackers.RenderGl
 
 				if (ringColor != Color.Transparent)
 				{
-					world.Render3DLineNoPrep(frustum, topStart, topEnd, ringColor, lineWidth);
+					world.Render3DLineNoPrep(gl, frustum, topStart, topEnd, ringColor, lineWidth);
 				}
 			}
 
 			// turn the lighting back on
-			GL.Enable(EnableCap.Lighting);
+			gl.Enable(EnableCap.Lighting);
 		}
 
-		public static void RenderPathOutline(this WorldView world, Matrix4X4 worldMatrix, IVertexSource path, Color color, double lineWidth = 1)
+		public static void RenderPathOutline(this WorldView world, GL gl, Matrix4X4 worldMatrix, IVertexSource path, Color color, double lineWidth = 1)
 		{
-			RenderHelper.PrepareFor3DLineRender(true);
+			RenderHelper.PrepareFor3DLineRender(gl, true);
 			Frustum frustum = world.GetClippingFrustum();
 
 			Vector3 firstPosition = default(Vector3);
@@ -423,17 +428,17 @@ namespace MatterHackers.RenderGl
 				else if (vertex.Command == FlagsAndCommand.LineTo)
 				{
 					var position = new Vector3(vertex.Position).Transform(worldMatrix);
-					world.Render3DLineNoPrep(frustum, prevPosition, position, color, lineWidth);
+					world.Render3DLineNoPrep(gl, frustum, prevPosition, position, color, lineWidth);
 					prevPosition = position;
 				}
 				else if (vertex.Command.HasFlag(FlagsAndCommand.FlagClose))
 				{
-					world.Render3DLineNoPrep(frustum, prevPosition, firstPosition, color, lineWidth);
+					world.Render3DLineNoPrep(gl, frustum, prevPosition, firstPosition, color, lineWidth);
 				}
 			}
 
 			// turn the lighting back on
-			GL.Enable(EnableCap.Lighting);
+			gl.Enable(EnableCap.Lighting);
 		}
 
 		public static AxisAlignedBoundingBox GetWorldspaceAabbOfRenderPathOutline(this WorldView world, Matrix4X4 worldMatrix, IVertexSource path, double lineWidth = 1)
@@ -459,28 +464,28 @@ namespace MatterHackers.RenderGl
 			return box;
 		}
 
-		public static void DrawOctree(this WorldView world, OctreeNode rootNode, int colorIndex)
+		public static void DrawOctree(this WorldView world, GL gl, OctreeNode rootNode, int colorIndex)
 		{
 			if (rootNode != null && rootNode.Children.Length > 0)
 			{
 				for (int i = 0; i < rootNode.Children.Length; i++)
 				{
-					DrawOctree(world, rootNode.Children[i], colorIndex + 1);
+					DrawOctree(world, gl, rootNode.Children[i], colorIndex + 1);
 				}
 
-				DrawOctreeNode(world, rootNode, Octree.DrawColors[colorIndex]);
+				DrawOctreeNode(world, gl, rootNode, Octree.DrawColors[colorIndex]);
 			}
 		}
 
-		public static void DrawOctreeNode(this WorldView world, OctreeNode node, Color color)
+		public static void DrawOctreeNode(this WorldView world, GL gl, OctreeNode node, Color color)
 		{
 			var aabb = new AxisAlignedBoundingBox(node.Min, node.Min + node.Size);
-			world.RenderAabb(aabb, Matrix4X4.Identity, color);
+			world.RenderAabb(gl, aabb, Matrix4X4.Identity, color);
 		}
 
-		public static void RenderAabb(this WorldView world, AxisAlignedBoundingBox bounds, Matrix4X4 matrix, Color color, double lineWidth = 1, double extendLineLength = 0)
+		public static void RenderAabb(this WorldView world, GL gl, AxisAlignedBoundingBox bounds, Matrix4X4 matrix, Color color, double lineWidth = 1, double extendLineLength = 0)
 		{
-			RenderHelper.PrepareFor3DLineRender(true);
+			RenderHelper.PrepareFor3DLineRender(gl, true);
 
 			Frustum frustum = world.GetClippingFrustum();
 			for (int i = 0; i < 4; i++)
@@ -502,12 +507,12 @@ namespace MatterHackers.RenderGl
 				}
 
 				// draw each of the edge lines (4) and their touching top and bottom lines (2 each)
-				world.Render3DLineNoPrep(frustum, sideStartPosition, sideEndPosition, color, lineWidth);
-				world.Render3DLineNoPrep(frustum, topStartPosition, topEndPosition, color, lineWidth);
-				world.Render3DLineNoPrep(frustum, bottomStartPosition, bottomEndPosition, color, lineWidth);
+				world.Render3DLineNoPrep(gl, frustum, sideStartPosition, sideEndPosition, color, lineWidth);
+				world.Render3DLineNoPrep(gl, frustum, topStartPosition, topEndPosition, color, lineWidth);
+				world.Render3DLineNoPrep(gl, frustum, bottomStartPosition, bottomEndPosition, color, lineWidth);
 			}
 
-			GL.Enable(EnableCap.Lighting);
+			gl.Enable(EnableCap.Lighting);
 		}
 
 		public static AxisAlignedBoundingBox GetWorldspaceAabbOfRenderAabb(AxisAlignedBoundingBox bounds, Matrix4X4 matrix, double lineWidth = 1, double extendLineLength = 0)
@@ -517,9 +522,9 @@ namespace MatterHackers.RenderGl
 			return bounds;
 		}
 
-		public static void RenderAxis(this WorldView world, Vector3 position, Matrix4X4 matrix, double size, double lineWidth)
+		public static void RenderAxis(this WorldView world, GL gl, Vector3 position, Matrix4X4 matrix, double size, double lineWidth)
 		{
-			RenderHelper.PrepareFor3DLineRender(true);
+			RenderHelper.PrepareFor3DLineRender(gl, true);
 
 			Frustum frustum = world.GetClippingFrustum();
 			Vector3 length = Vector3.One * size;
@@ -546,10 +551,10 @@ namespace MatterHackers.RenderGl
 				}
 
 				// draw each of the edge lines (4) and their touching top and bottom lines (2 each)
-				world.Render3DLineNoPrep(frustum, start, end, color, lineWidth);
+				world.Render3DLineNoPrep(gl, frustum, start, end, color, lineWidth);
 			}
 
-			GL.Enable(EnableCap.Lighting);
+			gl.Enable(EnableCap.Lighting);
 		}
 
 		public static AxisAlignedBoundingBox GetWorldspaceAabbOfRenderAxis(Vector3 position, Matrix4X4 matrix, double size, double lineWidth)
@@ -559,43 +564,43 @@ namespace MatterHackers.RenderGl
 
 		private static readonly ConditionalWeakTable<WorldView, AARenderTesselator> TesselatorsByWorld = new ConditionalWeakTable<WorldView, AARenderTesselator>();
 
-		public static void RenderPath(this WorldView world, IVertexSource vertexSource, Color color, bool doDepthTest)
+		public static void RenderPath(this WorldView world, GL gl, IVertexSource vertexSource, Color color, bool doDepthTest)
 		{
 			AARenderTesselator tesselator;
 
 			if (!TesselatorsByWorld.TryGetValue(world, out tesselator))
 			{
 				// Update reference and store in dictionary
-				tesselator = new AARenderTesselator(world);
+				tesselator = new AARenderTesselator(gl, world);
 
 				TesselatorsByWorld.Add(world, tesselator);
 			}
 
 			// TODO: Necessary?
 			// CheckLineImageCache();
-			// GL.Enable(EnableCap.Texture2D);
-			// GL.BindTexture(TextureTarget.Texture2D, RenderGl.ImageTexturePlugin.GetImageTexturePlugin(AATextureImages[color.Alpha0To255], false).GLTextureHandle);
+			// gl.Enable(EnableCap.Texture2D);
+			// gl.BindTexture(TextureTarget.Texture2D, RenderGl.ImageTexturePlugin.GetImageTexturePlugin(AATextureImages[color.Alpha0To255], false).GLTextureHandle);
 
 			// the source is always all white so has no does not have its color changed by the alpha
-			GL.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
-			GL.Enable(EnableCap.Blend);
+			gl.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
+			gl.Enable(EnableCap.Blend);
 
-			GL.Disable(EnableCap.CullFace);
-			GL.Disable(EnableCap.Lighting);
+			gl.Disable(EnableCap.CullFace);
+			gl.Disable(EnableCap.Lighting);
 
 			if (doDepthTest)
 			{
-				GL.Enable(EnableCap.DepthTest);
+				gl.Enable(EnableCap.DepthTest);
 			}
 			else
 			{
-				GL.Disable(EnableCap.DepthTest);
+				gl.Disable(EnableCap.DepthTest);
 			}
 
 			vertexSource.Rewind(0);
 
 			// the alpha has to come from the bound texture
-			GL.Color4(color.red, color.green, color.blue, (byte)255);
+			gl.Color4(color.red, color.green, color.blue, (byte)255);
 
 			tesselator.Clear();
 			VertexSourceToTesselator.SendShapeToTesselator(tesselator, vertexSource);

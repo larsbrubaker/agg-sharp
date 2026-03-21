@@ -30,6 +30,7 @@ either expressed or implied, of the FreeBSD Project.
 using MatterHackers.Agg;
 using MatterHackers.Agg.Image;
 using MatterHackers.PolygonMesh;
+using MatterHackers.RenderGl.OpenGl;
 using MatterHackers.VectorMath;
 using System;
 using System.Collections.Generic;
@@ -109,7 +110,7 @@ namespace MatterHackers.RenderGl
 
 		public static string MeshTrianglePluginName => nameof(MeshTrianglePluginName);
 
-		static public MeshTrianglePlugin Get(Mesh mesh, Func<Vector3Float, Color> getColorFunc = null)
+		static public MeshTrianglePlugin Get(GL gl, Mesh mesh, Func<Vector3Float, Color> getColorFunc = null)
 		{
 			object meshData;
 			mesh.PropertyBag.TryGetValue(MeshTrianglePluginName, out meshData);
@@ -126,7 +127,7 @@ namespace MatterHackers.RenderGl
 			}
 
 			MeshTrianglePlugin newPlugin = new MeshTrianglePlugin();
-			newPlugin.CreateRenderData(mesh, getColorFunc);
+			newPlugin.CreateRenderData(gl, mesh, getColorFunc);
 			newPlugin.meshUpdateCount = mesh.ChangedCount;
 			mesh.PropertyBag.Add(MeshTrianglePluginName, newPlugin);
 
@@ -138,7 +139,7 @@ namespace MatterHackers.RenderGl
 			// This is private as you can't build one of these. You have to call GetImageGLDisplayListPlugin.
 		}
 
-		private void CreateRenderData(Mesh meshToBuildListFor, Func<Vector3Float, Color> getColorFunc)
+		private void CreateRenderData(GL gl, Mesh meshToBuildListFor, Func<Vector3Float, Color> getColorFunc)
 		{
 			bool hasFaceColors = meshToBuildListFor.FaceColors != null
 				&& meshToBuildListFor.FaceColors.Length > 0;
@@ -156,7 +157,7 @@ namespace MatterHackers.RenderGl
 				meshToBuildListFor.FaceTextures.TryGetValue(faceIndex, out faceTexture);
 				if (faceTexture?.image != null)
 				{
-					ImageTexturePlugin.GetImageTexturePlugin(faceTexture.image, true);
+					ImageTexturePlugin.GetImageTexturePlugin(gl, faceTexture.image, true);
 				}
 
 				// don't compare the data of the texture but rather if they are just the same object

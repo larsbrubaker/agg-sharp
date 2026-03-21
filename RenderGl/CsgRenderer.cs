@@ -42,14 +42,17 @@ namespace MatterHackers.RenderGl
 {
 	public class CsgRenderer
 	{
-		public static void Render(CsgObject objectToProcess)
+		private readonly GL gl;
+
+		public static void Render(GL gl, CsgObject objectToProcess)
 		{
-			CsgRenderer visitor = new CsgRenderer();
+			CsgRenderer visitor = new CsgRenderer(gl);
 			visitor.RenderToGlRecursive((dynamic)objectToProcess);
 		}
 
-		public CsgRenderer()
+		public CsgRenderer(GL gl)
 		{
+			this.gl = gl;
 		}
 
 		#region Visitor Pattern Functions
@@ -204,10 +207,10 @@ namespace MatterHackers.RenderGl
 
 		public void RenderToGlRecursive(TransformBase objectToProcess)
 		{
-			GL.PushMatrix();
-			GL.MultMatrix(objectToProcess.transform.GetAsFloatArray());
+			gl.PushMatrix();
+			gl.MultMatrix(objectToProcess.transform.GetAsFloatArray());
 			RenderToGlRecursive((dynamic)objectToProcess.objectToTransform);
-			GL.PopMatrix();
+			gl.PopMatrix();
 		}
 
 		#endregion Transform

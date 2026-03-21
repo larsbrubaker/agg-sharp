@@ -54,6 +54,7 @@ namespace MatterHackers.RenderGl
 
 		internal class glAllocatedData
 		{
+			internal GL gl;
 			internal int glTextureHandle;
 			internal int refreshCountCreatedOn;
 			internal int glContextId;
@@ -68,13 +69,14 @@ namespace MatterHackers.RenderGl
 
 			internal void DeleteTextureData(object sender, EventArgs e)
 			{
-				GL.DeleteTexture(glTextureHandle);
+				gl.DeleteTexture(glTextureHandle);
 				glTextureHandle = -1;
 			}
 		}
 
 		private static List<glAllocatedData> glDataNeedingToBeDeleted = new List<glAllocatedData>();
 
+		private GL gl;
 		private glAllocatedData glData = new glAllocatedData();
 
 		private int imageUpdateCount;
@@ -98,7 +100,7 @@ namespace MatterHackers.RenderGl
 			removeGlDataCallBackHolder = inCallBackHolder;
 		}
 
-		public static ImageTexturePlugin GetImageTexturePlugin(ImageBuffer imageToGetDisplayListFor, bool createAndUseMipMaps, bool textureMagFilterLinear = true, bool clamp = true)
+		public static ImageTexturePlugin GetImageTexturePlugin(GL gl, ImageBuffer imageToGetDisplayListFor, bool createAndUseMipMaps, bool textureMagFilterLinear = true, bool clamp = true)
 		{
 			imagesWithCacheData.TryGetValue(imageToGetDisplayListFor.GetBuffer(), out ImageTexturePlugin plugin);
 
@@ -113,7 +115,7 @@ namespace MatterHackers.RenderGl
 						&& glDataNeedingToBeDeleted[i].glContextId == contextId
 						&& glDataNeedingToBeDeleted[i].refreshCountCreatedOn == currentGlobalRefreshCount) // this is to leak on purpose on android for some gl that kills textures
 					{
-						GL.DeleteTexture(textureToDelete);
+						gl.DeleteTexture(textureToDelete);
 						if (removeGlDataCallBackHolder != null)
 						{
 							removeGlDataCallBackHolder.releaseAllGlData -= glDataNeedingToBeDeleted[i].DeleteTextureData;
@@ -132,7 +134,7 @@ namespace MatterHackers.RenderGl
 				int textureToDelete = plugin.GLTextureHandle;
 				if (plugin.glData.refreshCountCreatedOn == currentGlobalRefreshCount)
 				{
-					GL.DeleteTexture(textureToDelete);
+					gl.DeleteTexture(textureToDelete);
 				}
 
 				plugin.glData.glTextureHandle = -1;
@@ -145,11 +147,12 @@ namespace MatterHackers.RenderGl
 
 			if (plugin == null)
 			{
-				var newPlugin = new ImageTexturePlugin();
+				var newPlugin = new ImageTexturePlugin(gl);
 				imagesWithCacheData.Add(imageToGetDisplayListFor.GetBuffer(), newPlugin);
 				newPlugin.createdWithMipMaps = createAndUseMipMaps;
 				newPlugin.clamp = clamp;
 				newPlugin.glData.glContextId = contextId;
+				newPlugin.glData.gl = gl;
 				newPlugin.CreateGlDataForImage(imageToGetDisplayListFor, textureMagFilterLinear);
 				newPlugin.imageUpdateCount = imageToGetDisplayListFor.ChangedCount;
 				newPlugin.glData.refreshCountCreatedOn = currentGlobalRefreshCount;
@@ -167,9 +170,10 @@ namespace MatterHackers.RenderGl
 
 		public int GLTextureHandle => glData.glTextureHandle;
 
-		private ImageTexturePlugin()
+		private ImageTexturePlugin(GL gl)
 		{
 			// This is private as you can't build one of these. You have to call GetImageTexturePlugin.
+			this.gl = gl;
 		}
 
 		~ImageTexturePlugin()
@@ -213,7 +217,7 @@ namespace MatterHackers.RenderGl
 			{
 				{
 					// Compatible context (GL 1.0-2.1)
-					string extensions = GL.GetString(StringName.Extensions);
+					string extensions = gl.GetString(StringName.Extensions);
 					if (extensions.Contains("ARB_texture_non_power_of_two"))
 					{
 						hwSupportsOnlyPowerOfTwoTextures = false;
@@ -245,46 +249,46 @@ namespace MatterHackers.RenderGl
 			bufferedImage = FixImageSizePower2IfRequired(bufferedImage);
 			FixImageColors(bufferedImage);
 
-			GL.Enable(EnableCap.Texture2D);
+			gl.Enable(EnableCap.Texture2D);
 			// Create the texture handle
-			glData.glTextureHandle = GL.GenTexture();
+			glData.glTextureHandle = gl.GenTexture();
 
 			// Set up some texture parameters for openGL
-			GL.BindTexture(TextureTarget.Texture2D, glData.glTextureHandle);
+			gl.BindTexture(TextureTarget.Texture2D, glData.glTextureHandle);
 			if (textureMagFilterLinear)
 			{
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
 			}
 			else
 			{
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Nearest);
 			}
 
 			if (createdWithMipMaps)
 			{
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
 			}
 			else
 			{
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
 			}
 
 			if (clamp)
 			{
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
 			}
 			else
 			{
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.Repeat);
-				GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.Repeat);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.Repeat);
+				gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.Repeat);
 			}
 
 			// Create the texture
 			switch (bufferedImage.BitDepth)
 			{
 				case 32:
-					GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, hardwareWidth, hardwareHeight,
+					gl.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgba, hardwareWidth, hardwareHeight,
 						0, PixelFormat.Rgba, PixelType.UnsignedByte, bufferedImage.GetBuffer());
 					break;
 
@@ -305,7 +309,7 @@ namespace MatterHackers.RenderGl
 							int mipLevel = 1;
 							while (sourceImage.Width > 1 || sourceImage.Height > 1)
 							{
-								GL.TexImage2D(TextureTarget.Texture2D, mipLevel++, PixelInternalFormat.Rgba, tempImage.Width, tempImage.Height,
+								gl.TexImage2D(TextureTarget.Texture2D, mipLevel++, PixelInternalFormat.Rgba, tempImage.Width, tempImage.Height,
 									0, PixelFormat.Rgba, PixelType.UnsignedByte, tempImage.GetBuffer());
 
 								sourceImage = new ImageBuffer(tempImage);
@@ -404,22 +408,22 @@ namespace MatterHackers.RenderGl
 				glData.positions = quadData.Positions;
 			}
 
-			GL.BindTexture(TextureTarget.Texture2D, GLTextureHandle);
-			GL.Begin(BeginMode.TriangleFan);
+			gl.BindTexture(TextureTarget.Texture2D, GLTextureHandle);
+			gl.Begin(BeginMode.TriangleFan);
 
-			GL.TexCoord2(glData.textureUVs[0], glData.textureUVs[1]);
-			GL.Vertex2(glData.positions[0], glData.positions[1]);
+			gl.TexCoord2(glData.textureUVs[0], glData.textureUVs[1]);
+			gl.Vertex2(glData.positions[0], glData.positions[1]);
 
-			GL.TexCoord2(glData.textureUVs[2], glData.textureUVs[3]);
-			GL.Vertex2(glData.positions[2], glData.positions[3]);
+			gl.TexCoord2(glData.textureUVs[2], glData.textureUVs[3]);
+			gl.Vertex2(glData.positions[2], glData.positions[3]);
 
-			GL.TexCoord2(glData.textureUVs[4], glData.textureUVs[5]);
-			GL.Vertex2(glData.positions[4], glData.positions[5]);
+			gl.TexCoord2(glData.textureUVs[4], glData.textureUVs[5]);
+			gl.Vertex2(glData.positions[4], glData.positions[5]);
 
-			GL.TexCoord2(glData.textureUVs[6], glData.textureUVs[7]);
-			GL.Vertex2(glData.positions[6], glData.positions[7]);
+			gl.TexCoord2(glData.textureUVs[6], glData.textureUVs[7]);
+			gl.Vertex2(glData.positions[6], glData.positions[7]);
 
-			GL.End();
+			gl.End();
 		}
 	}
 }

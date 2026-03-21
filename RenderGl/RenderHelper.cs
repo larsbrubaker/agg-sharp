@@ -70,20 +70,20 @@ namespace MatterHackers.RenderGl
 			end += direction * length;
 		}
 
-		public static void PrepareFor3DLineRender(bool doDepthTest)
+		public static void PrepareFor3DLineRender(GL gl, bool doDepthTest)
 		{
-			GL.Disable(EnableCap.Texture2D);
+			gl.Disable(EnableCap.Texture2D);
 
-			GL.Enable(EnableCap.Blend);
-			GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
-			GL.Disable(EnableCap.Lighting);
+			gl.Enable(EnableCap.Blend);
+			gl.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
+			gl.Disable(EnableCap.Lighting);
 			if (doDepthTest)
 			{
-				GL.Enable(EnableCap.DepthTest);
+				gl.Enable(EnableCap.DepthTest);
 			}
 			else
 			{
-				GL.Disable(EnableCap.DepthTest);
+				gl.Disable(EnableCap.DepthTest);
 			}
 		}
 
@@ -159,7 +159,8 @@ namespace MatterHackers.RenderGl
 			return new DisposableScope(() => suppressBedShadowCastingDepth--);
 		}
 
-		public static void Render(Mesh meshToRender,
+		public static void Render(GL gl,
+			Mesh meshToRender,
 			Color partColor,
 			RenderTypes renderType = RenderTypes.Shaded,
 			Matrix4X4? meshToViewTransform = null,
@@ -172,10 +173,11 @@ namespace MatterHackers.RenderGl
 			bool overrideFaceColors = false,
 			float alphaMultiplier = 1.0f)
 		{
-			Render(meshToRender, partColor, Matrix4X4.Identity, renderType, meshToViewTransform, wireFrameColor, meshChanged, blendTexture, forceCullBackFaces: forceCullBackFaces, castsBedShadow: castsBedShadow, isSelected: isSelected, overrideFaceColors: overrideFaceColors, alphaMultiplier: alphaMultiplier);
+			Render(gl, meshToRender, partColor, Matrix4X4.Identity, renderType, meshToViewTransform, wireFrameColor, meshChanged, blendTexture, forceCullBackFaces: forceCullBackFaces, castsBedShadow: castsBedShadow, isSelected: isSelected, overrideFaceColors: overrideFaceColors, alphaMultiplier: alphaMultiplier);
 		}
 
-		public static void Render(Mesh meshToRender,
+		public static void Render(GL gl,
+			Mesh meshToRender,
 			Color color,
             Matrix4X4 transform,
 			RenderTypes renderType = RenderTypes.Shaded,
@@ -192,7 +194,7 @@ namespace MatterHackers.RenderGl
 		{
 			if (meshToRender != null)
 			{
-				if (GL.Instance is INativeSceneRenderer nativeSceneRenderer)
+				if (gl?.GpuContext is INativeSceneRenderer nativeSceneRenderer)
 				{
 					var command = new MeshRenderCommand
 					{
@@ -219,32 +221,32 @@ namespace MatterHackers.RenderGl
 					}
 				}
 
-				GL.Color4(color.Red0To255, color.Green0To255, color.Blue0To255, color.Alpha0To255);
+				gl.Color4(color.Red0To255, color.Green0To255, color.Blue0To255, color.Alpha0To255);
 
-				GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
+				gl.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
 
 				if (color.Alpha0To1 < 1)
 				{
 					if (forceCullBackFaces)
 					{
-						GL.Enable(EnableCap.CullFace);
+						gl.Enable(EnableCap.CullFace);
 					}
 					else
 					{
 						// by default render back faces of transparent objects
-						GL.Disable(EnableCap.CullFace);
+						gl.Disable(EnableCap.CullFace);
 					}
-					GL.Enable(EnableCap.Blend);
+					gl.Enable(EnableCap.Blend);
 				}
 				else
 				{
-					GL.Enable(EnableCap.CullFace);
-					GL.Enable(EnableCap.Blend);
+					gl.Enable(EnableCap.CullFace);
+					gl.Enable(EnableCap.Blend);
 				}
 
-				GL.MatrixMode(MatrixMode.Modelview);
-				GL.PushMatrix();
-				GL.MultMatrix(transform.GetAsFloatArray());
+				gl.MatrixMode(MatrixMode.Modelview);
+				gl.PushMatrix();
+				gl.MultMatrix(transform.GetAsFloatArray());
 
 				switch (renderType)
 				{
@@ -256,43 +258,43 @@ namespace MatterHackers.RenderGl
 					case RenderTypes.NonManifold:
 						if (color.Alpha0To255 > 0)
 						{
-							GL.Enable(EnableCap.PolygonOffsetFill);
-							GL.PolygonOffset(1, 1);
-							DrawToGL(meshToRender, color.Alpha0To1 < 1, meshToViewTransform, allowBspRendering: allowBspRendering);
-							GL.PolygonOffset(0, 0);
-							GL.Disable(EnableCap.PolygonOffsetFill);
+							gl.Enable(EnableCap.PolygonOffsetFill);
+							gl.PolygonOffset(1, 1);
+							DrawToGL(gl, meshToRender, color.Alpha0To1 < 1, meshToViewTransform, allowBspRendering: allowBspRendering);
+							gl.PolygonOffset(0, 0);
+							gl.Disable(EnableCap.PolygonOffsetFill);
 						}
 
-						DrawWireOverlay(meshToRender, renderType, wireFrameColor, meshChanged);
+						DrawWireOverlay(gl, meshToRender, renderType, wireFrameColor, meshChanged);
 						break;
 
 					case RenderTypes.Wireframe:
-						DrawWireOverlay(meshToRender, renderType, wireFrameColor);
+						DrawWireOverlay(gl, meshToRender, renderType, wireFrameColor);
 						break;
 
 					case RenderTypes.Overhang:
-						OverhangRender.EnsureUpdated(meshToRender, transform);
-						DrawToGL(meshToRender, color.Alpha0To1 < 1, meshToViewTransform);
+						OverhangRender.EnsureUpdated(gl, meshToRender, transform);
+						DrawToGL(gl, meshToRender, color.Alpha0To1 < 1, meshToViewTransform);
 						break;
 
 					case RenderTypes.Shaded:
-						DrawToGL(meshToRender, color.Alpha0To1 < 1, meshToViewTransform, blendTexture, allowBspRendering);
+						DrawToGL(gl, meshToRender, color.Alpha0To1 < 1, meshToViewTransform, blendTexture, allowBspRendering);
 						break;
 				}
 
-				GL.PopMatrix();
+				gl.PopMatrix();
 			}
 		}
 
-		private static void DrawToGL(Mesh meshToRender, bool isTransparent, Matrix4X4? meshToViewTransform, bool blendTexture = true, bool allowBspRendering = true)
+		private static void DrawToGL(GL gl, Mesh meshToRender, bool isTransparent, Matrix4X4? meshToViewTransform, bool blendTexture = true, bool allowBspRendering = true)
 		{
 			if (!blendTexture)
 			{
 				// Turn off default GL_MODULATE mode
-				GL.TexEnv(TextureEnvironmentTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, GL_REPLACE);
+				gl.TexEnv(TextureEnvironmentTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, GL_REPLACE);
 			}
 
-			var glMeshPlugin = MeshTrianglePlugin.Get(meshToRender);
+			var glMeshPlugin = MeshTrianglePlugin.Get(gl, meshToRender);
 			for (int i = 0; i < glMeshPlugin.subMeshs.Count; i++)
 			{
 				SubTriangleMesh subMesh = glMeshPlugin.subMeshs[i];
@@ -301,27 +303,27 @@ namespace MatterHackers.RenderGl
 				{
 					if (subMesh.texture.HasTransparency)
 					{
-						GL.Enable(EnableCap.Blend);
+						gl.Enable(EnableCap.Blend);
 					}
 
-					var glPlugin = ImageTexturePlugin.GetImageTexturePlugin(subMesh.texture, true);
-					GL.Enable(EnableCap.Texture2D);
-					GL.BindTexture(TextureTarget.Texture2D, glPlugin.GLTextureHandle);
-					GL.EnableClientState(ArrayCap.TextureCoordArray);
+					var glPlugin = ImageTexturePlugin.GetImageTexturePlugin(gl, subMesh.texture, true);
+					gl.Enable(EnableCap.Texture2D);
+					gl.BindTexture(TextureTarget.Texture2D, glPlugin.GLTextureHandle);
+					gl.EnableClientState(ArrayCap.TextureCoordArray);
 				}
 				else
 				{
-					GL.Disable(EnableCap.Texture2D);
-					GL.DisableClientState(ArrayCap.TextureCoordArray);
+					gl.Disable(EnableCap.Texture2D);
+					gl.DisableClientState(ArrayCap.TextureCoordArray);
 				}
 
 				if (subMesh.UseVertexColors)
 				{
-					GL.EnableClientState(ArrayCap.ColorArray);
+					gl.EnableClientState(ArrayCap.ColorArray);
 				}
 
-				GL.EnableClientState(ArrayCap.NormalArray);
-				GL.EnableClientState(ArrayCap.VertexArray);
+				gl.EnableClientState(ArrayCap.NormalArray);
+				gl.EnableClientState(ArrayCap.VertexArray);
 				unsafe
 				{
 					fixed (VertexTextureData* pTextureData = subMesh.textureData.Array)
@@ -332,46 +334,46 @@ namespace MatterHackers.RenderGl
 							{
 								fixed (VertexPositionData* pPosition = subMesh.positionData.Array)
 								{
-									GL.VertexPointer(3, VertexPointerType.Float, 0, new IntPtr(pPosition));
-									GL.NormalPointer(NormalPointerType.Float, 0, new IntPtr(pNormalData));
-									GL.TexCoordPointer(2, TexCordPointerType.Float, 0, new IntPtr(pTextureData));
+									gl.VertexPointer(3, VertexPointerType.Float, 0, new IntPtr(pPosition));
+									gl.NormalPointer(NormalPointerType.Float, 0, new IntPtr(pNormalData));
+									gl.TexCoordPointer(2, TexCordPointerType.Float, 0, new IntPtr(pTextureData));
 									if (pColorData != null)
 									{
-										GL.ColorPointer(4, ColorPointerType.UnsignedByte, 0, new IntPtr(pColorData));
+										gl.ColorPointer(4, ColorPointerType.UnsignedByte, 0, new IntPtr(pColorData));
 									}
 
-									GL.DrawArrays(BeginMode.Triangles, 0, subMesh.positionData.Count);
+									gl.DrawArrays(BeginMode.Triangles, 0, subMesh.positionData.Count);
 								}
 							}
 						}
 					}
 				}
 
-				GL.DisableClientState(ArrayCap.NormalArray);
-				GL.DisableClientState(ArrayCap.VertexArray);
-				GL.DisableClientState(ArrayCap.TextureCoordArray);
-				GL.DisableClientState(ArrayCap.ColorArray);
+				gl.DisableClientState(ArrayCap.NormalArray);
+				gl.DisableClientState(ArrayCap.VertexArray);
+				gl.DisableClientState(ArrayCap.TextureCoordArray);
+				gl.DisableClientState(ArrayCap.ColorArray);
 
-				GL.TexCoordPointer(2, TexCordPointerType.Float, 0, new IntPtr(0));
-				GL.ColorPointer(4, ColorPointerType.UnsignedByte, 0, new IntPtr(0));
-				GL.NormalPointer(NormalPointerType.Float, 0, new IntPtr(0));
-				GL.VertexPointer(3, VertexPointerType.Float, 0, new IntPtr(0));
+				gl.TexCoordPointer(2, TexCordPointerType.Float, 0, new IntPtr(0));
+				gl.ColorPointer(4, ColorPointerType.UnsignedByte, 0, new IntPtr(0));
+				gl.NormalPointer(NormalPointerType.Float, 0, new IntPtr(0));
+				gl.VertexPointer(3, VertexPointerType.Float, 0, new IntPtr(0));
 
 				if (subMesh.texture != null)
 				{
-					GL.DisableClientState(ArrayCap.TextureCoordArray);
+					gl.DisableClientState(ArrayCap.TextureCoordArray);
 				}
 			}
 
 			if (!blendTexture)
 			{
 				// Restore default GL_MODULATE mode
-				GL.TexEnv(TextureEnvironmentTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, GL_MODULATE);
+				gl.TexEnv(TextureEnvironmentTarget.TextureEnv, TextureEnvParameter.TextureEnvMode, GL_MODULATE);
 			}
 		}
 
 		// There can be a singleton of this because GL must always render on the UI thread and can't overlap this array
-		private static void DrawToGLZSorted(Mesh mesh, Matrix4X4 meshToViewTransform, Matrix4X4 invMeshToViewTransform)
+		private static void DrawToGLZSorted(GL gl, Mesh mesh, Matrix4X4 meshToViewTransform, Matrix4X4 invMeshToViewTransform)
 		{
 			ImageBuffer lastFaceTexture = null;
 
@@ -392,48 +394,48 @@ namespace MatterHackers.RenderGl
 					// Make sure the GLMeshPlugin has a reference to hold onto the image so it does not go away before this.
 					if (faceTexture != null)
 					{
-						var glPlugin = ImageTexturePlugin.GetImageTexturePlugin(faceTexture.image, true);
-						GL.Enable(EnableCap.Texture2D);
-						GL.BindTexture(TextureTarget.Texture2D, glPlugin.GLTextureHandle);
+						var glPlugin = ImageTexturePlugin.GetImageTexturePlugin(gl, faceTexture.image, true);
+						gl.Enable(EnableCap.Texture2D);
+						gl.BindTexture(TextureTarget.Texture2D, glPlugin.GLTextureHandle);
 					}
 					else
 					{
-						GL.Disable(EnableCap.Texture2D);
+						gl.Disable(EnableCap.Texture2D);
 					}
 
 					lastFaceTexture = faceTexture.image;
 				}
 
-				GL.Begin(BeginMode.Triangles);
+				gl.Begin(BeginMode.Triangles);
 				var normal = mesh.Faces[face].normal;
-				GL.Normal3(normal.X, normal.Y, normal.Z);
+				gl.Normal3(normal.X, normal.Y, normal.Z);
 				// load up the uvs
 				if (faceTexture != null)
 				{
-					GL.TexCoord2(faceTexture.uv0);
-					GL.Vertex3(mesh.Vertices[mesh.Faces[face].v0]);
+					gl.TexCoord2(faceTexture.uv0);
+					gl.Vertex3(mesh.Vertices[mesh.Faces[face].v0]);
 
-					GL.TexCoord2(faceTexture.uv1);
-					GL.Vertex3(mesh.Vertices[mesh.Faces[face].v1]);
+					gl.TexCoord2(faceTexture.uv1);
+					gl.Vertex3(mesh.Vertices[mesh.Faces[face].v1]);
 
-					GL.TexCoord2(faceTexture.uv2);
-					GL.Vertex3(mesh.Vertices[mesh.Faces[face].v2]);
+					gl.TexCoord2(faceTexture.uv2);
+					gl.Vertex3(mesh.Vertices[mesh.Faces[face].v2]);
 				}
 				else
 				{
-					GL.Vertex3(mesh.Vertices[mesh.Faces[face].v0]);
-					GL.Vertex3(mesh.Vertices[mesh.Faces[face].v1]);
-					GL.Vertex3(mesh.Vertices[mesh.Faces[face].v2]);
+					gl.Vertex3(mesh.Vertices[mesh.Faces[face].v0]);
+					gl.Vertex3(mesh.Vertices[mesh.Faces[face].v1]);
+					gl.Vertex3(mesh.Vertices[mesh.Faces[face].v2]);
 				}
 
-				GL.End();
+				gl.End();
 			}
 		}
 
-        private static void DrawWireOverlay(Mesh meshToRender, RenderTypes renderType, Color wireColor, Action meshChanged = null)
+        private static void DrawWireOverlay(GL gl, Mesh meshToRender, RenderTypes renderType, Color wireColor, Action meshChanged = null)
         {
-            GL.Disable(EnableCap.Lighting);
-            GL.DisableClientState(ArrayCap.TextureCoordArray);
+            gl.Disable(EnableCap.Lighting);
+            gl.DisableClientState(ArrayCap.TextureCoordArray);
             IEdgeLinesContainer edgeLinesContainer = null;
             if (renderType == RenderTypes.Outlines)
             {
@@ -448,8 +450,8 @@ namespace MatterHackers.RenderGl
                 edgeLinesContainer = MeshWirePlugin.Get(meshToRender, wireColor);
             }
 
-            GL.EnableClientState(ArrayCap.VertexArray);
-            GL.EnableClientState(ArrayCap.ColorArray);
+            gl.EnableClientState(ArrayCap.VertexArray);
+            gl.EnableClientState(ArrayCap.ColorArray);
 
             VectorPOD<WireVertexData> edgeLines = edgeLinesContainer.EdgeLines;
             unsafe
@@ -459,92 +461,92 @@ namespace MatterHackers.RenderGl
                     int stride = WireVertexData.Stride;
 
                     // Color pointer points to the start of the structure (r,g,b bytes)
-                    GL.ColorPointer(4, ColorPointerType.UnsignedByte, stride, new IntPtr(pv));
+                    gl.ColorPointer(4, ColorPointerType.UnsignedByte, stride, new IntPtr(pv));
 
                     // Vertex pointer points to the float positions, after the color + padding byte
-                    GL.VertexPointer(3, VertexPointerType.Float, stride, new IntPtr(pv) + 4);
+                    gl.VertexPointer(3, VertexPointerType.Float, stride, new IntPtr(pv) + 4);
 
-                    GL.DrawArrays(BeginMode.Lines, 0, edgeLines.Count);
+                    gl.DrawArrays(BeginMode.Lines, 0, edgeLines.Count);
                 }
             }
 
-            GL.DisableClientState(ArrayCap.ColorArray);
-            GL.DisableClientState(ArrayCap.VertexArray);
-            GL.Enable(EnableCap.Lighting);
+            gl.DisableClientState(ArrayCap.ColorArray);
+            gl.DisableClientState(ArrayCap.VertexArray);
+            gl.Enable(EnableCap.Lighting);
         }
 
-        public static void SetGlContext(WorldView worldView, RectangleDouble screenRect, LightingData lighting)
+        public static void SetGlContext(GL gl, WorldView worldView, RectangleDouble screenRect, LightingData lighting)
 		{
-			GL.ClearDepth(1.0);
-			GL.Clear(ClearBufferMask.DepthBufferBit);   // Clear the Depth Buffer
+			gl.ClearDepth(1.0);
+			gl.Clear(ClearBufferMask.DepthBufferBit);   // Clear the Depth Buffer
 
-			GL.PushAttrib(AttribMask.ViewportBit);
-			GL.Viewport((int)screenRect.Left, (int)screenRect.Bottom, (int)screenRect.Width, (int)screenRect.Height);
+			gl.PushAttrib(AttribMask.ViewportBit);
+			gl.Viewport((int)screenRect.Left, (int)screenRect.Bottom, (int)screenRect.Width, (int)screenRect.Height);
 
-			GL.ShadeModel(ShadingModel.Smooth);
+			gl.ShadeModel(ShadingModel.Smooth);
 
-			GL.FrontFace(FrontFaceDirection.Ccw);
-			GL.CullFace(CullFaceMode.Back);
+			gl.FrontFace(FrontFaceDirection.Ccw);
+			gl.CullFace(CullFaceMode.Back);
 
-			GL.DepthFunc(DepthFunction.Lequal);
+			gl.DepthFunc(DepthFunction.Lequal);
 
-			GL.Disable(EnableCap.DepthTest);
+			gl.Disable(EnableCap.DepthTest);
 			// ClearToGradient();
 
-			GL.Light(LightName.Light0, LightParameter.Ambient, lighting.AmbientLight);
-			GL.Light(LightName.Light0, LightParameter.Diffuse, lighting.DiffuseLight0);
-			GL.Light(LightName.Light0, LightParameter.Specular, lighting.SpecularLight0);
+			gl.Light(LightName.Light0, LightParameter.Ambient, lighting.AmbientLight);
+			gl.Light(LightName.Light0, LightParameter.Diffuse, lighting.DiffuseLight0);
+			gl.Light(LightName.Light0, LightParameter.Specular, lighting.SpecularLight0);
 
-			GL.Light(LightName.Light1, LightParameter.Diffuse, lighting.DiffuseLight1);
-			GL.Light(LightName.Light1, LightParameter.Specular, lighting.SpecularLight1);
+			gl.Light(LightName.Light1, LightParameter.Diffuse, lighting.DiffuseLight1);
+			gl.Light(LightName.Light1, LightParameter.Specular, lighting.SpecularLight1);
 
-			GL.ColorMaterial(MaterialFace.FrontAndBack, ColorMaterialParameter.AmbientAndDiffuse);
+			gl.ColorMaterial(MaterialFace.FrontAndBack, ColorMaterialParameter.AmbientAndDiffuse);
 
-			GL.Enable(EnableCap.Light0);
-			GL.Enable(EnableCap.Light1);
-			GL.Enable(EnableCap.DepthTest);
-			GL.Enable(EnableCap.Blend);
-			GL.Enable(EnableCap.Normalize);
-			GL.Enable(EnableCap.Lighting);
-			GL.Enable(EnableCap.ColorMaterial);
+			gl.Enable(EnableCap.Light0);
+			gl.Enable(EnableCap.Light1);
+			gl.Enable(EnableCap.DepthTest);
+			gl.Enable(EnableCap.Blend);
+			gl.Enable(EnableCap.Normalize);
+			gl.Enable(EnableCap.Lighting);
+			gl.Enable(EnableCap.ColorMaterial);
 
 			var lightDirectionVector = new Vector3(lighting.LightDirection0[0], lighting.LightDirection0[1], lighting.LightDirection0[2]);
 			lightDirectionVector.Normalize();
 			lighting.LightDirection0[0] = (float)lightDirectionVector.X;
 			lighting.LightDirection0[1] = (float)lightDirectionVector.Y;
 			lighting.LightDirection0[2] = (float)lightDirectionVector.Z;
-			GL.Light(LightName.Light0, LightParameter.Position, lighting.LightDirection0);
-			GL.Light(LightName.Light1, LightParameter.Position, lighting.LightDirection1);
+			gl.Light(LightName.Light0, LightParameter.Position, lighting.LightDirection0);
+			gl.Light(LightName.Light1, LightParameter.Position, lighting.LightDirection1);
 
 			// set the projection matrix
-			GL.MatrixMode(MatrixMode.Projection);
-			GL.PushMatrix();
-			GL.LoadMatrix(worldView.ProjectionMatrix.GetAsDoubleArray());
+			gl.MatrixMode(MatrixMode.Projection);
+			gl.PushMatrix();
+			gl.LoadMatrix(worldView.ProjectionMatrix.GetAsDoubleArray());
 
 			// set the modelview matrix
-			GL.MatrixMode(MatrixMode.Modelview);
-			GL.PushMatrix();
-			GL.LoadMatrix(worldView.ModelviewMatrix.GetAsDoubleArray());
+			gl.MatrixMode(MatrixMode.Modelview);
+			gl.PushMatrix();
+			gl.LoadMatrix(worldView.ModelviewMatrix.GetAsDoubleArray());
 		}
 
-		public static void UnsetGlContext()
+		public static void UnsetGlContext(GL gl)
 		{
-			GL.MatrixMode(MatrixMode.Projection);
-			GL.PopMatrix();
+			gl.MatrixMode(MatrixMode.Projection);
+			gl.PopMatrix();
 
-			GL.MatrixMode(MatrixMode.Modelview);
-			GL.PopMatrix();
+			gl.MatrixMode(MatrixMode.Modelview);
+			gl.PopMatrix();
 
-			GL.Disable(EnableCap.ColorMaterial);
-			GL.Disable(EnableCap.Lighting);
-			GL.Disable(EnableCap.Light0);
-			GL.Disable(EnableCap.Light1);
+			gl.Disable(EnableCap.ColorMaterial);
+			gl.Disable(EnableCap.Lighting);
+			gl.Disable(EnableCap.Light0);
+			gl.Disable(EnableCap.Light1);
 
-			GL.Disable(EnableCap.Normalize);
-			GL.Disable(EnableCap.Blend);
-			GL.Disable(EnableCap.DepthTest);
+			gl.Disable(EnableCap.Normalize);
+			gl.Disable(EnableCap.Blend);
+			gl.Disable(EnableCap.DepthTest);
 
-			GL.PopAttrib();
+			gl.PopAttrib();
 		}
 
 		private sealed class DisposableScope : IDisposable

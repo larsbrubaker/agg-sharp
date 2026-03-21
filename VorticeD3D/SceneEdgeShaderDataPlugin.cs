@@ -31,6 +31,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using MatterHackers.PolygonMesh;
+using MatterHackers.RenderGl.OpenGl;
 using MatterHackers.VectorMath;
 
 namespace MatterHackers.RenderGl
@@ -65,7 +66,7 @@ namespace MatterHackers.RenderGl
 
 		public static string SceneEdgeShaderDataPluginName => nameof(SceneEdgeShaderDataPluginName);
 
-		public static SceneEdgeShaderDataPlugin Get(Mesh mesh, RenderTypes renderType)
+		public static SceneEdgeShaderDataPlugin Get(GL gl, Mesh mesh, RenderTypes renderType)
 		{
 			mesh.PropertyBag.TryGetValue(SceneEdgeShaderDataPluginName, out object meshData);
 			if (meshData is Dictionary<RenderTypes, SceneEdgeShaderDataPlugin> pluginsByRenderType
@@ -85,7 +86,7 @@ namespace MatterHackers.RenderGl
 			}
 
 			var newPlugin = new SceneEdgeShaderDataPlugin();
-			newPlugin.CreateRenderData(mesh, renderType);
+			newPlugin.CreateRenderData(gl, mesh, renderType);
 			newPlugin.meshUpdateCount = mesh.ChangedCount;
 			newPlugin.renderType = renderType;
 			pluginsByRenderType[renderType] = newPlugin;
@@ -93,9 +94,9 @@ namespace MatterHackers.RenderGl
 			return newPlugin;
 		}
 
-		private void CreateRenderData(Mesh mesh, RenderTypes renderType)
+		private void CreateRenderData(GL gl, Mesh mesh, RenderTypes renderType)
 		{
-			var trianglePlugin = MeshTrianglePlugin.Get(mesh);
+			var trianglePlugin = MeshTrianglePlugin.Get(gl, mesh);
 			var edgeHintsByFace = BuildEdgeHintsByFace(mesh, renderType);
 			var edgeHintsBySubMesh = BuildEdgeHintsBySubMesh(mesh, edgeHintsByFace);
 

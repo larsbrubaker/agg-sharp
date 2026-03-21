@@ -39,10 +39,12 @@ namespace MatterHackers.RenderGl
 {
 	public class RenderTesselator : VertexTesselatorAbstract
 	{
+		private readonly GL gl;
 		private readonly List<Vector2> verticesCache = new List<Vector2>();
 
-		public RenderTesselator()
+		public RenderTesselator(GL gl)
 		{
+			this.gl = gl;
 			callBegin = BeginCallBack;
 			callEnd = EndCallBack;
 			callVertex = VertexCallBack;
@@ -61,27 +63,27 @@ namespace MatterHackers.RenderGl
 			switch (type)
 			{
 				case Tesselator.TriangleListType.Triangles:
-					GL.Begin(BeginMode.Triangles);
+					gl.Begin(BeginMode.Triangles);
 					break;
 
 				case Tesselator.TriangleListType.TriangleFan:
-					GL.Begin(BeginMode.TriangleFan);
+					gl.Begin(BeginMode.TriangleFan);
 					break;
 
 				case Tesselator.TriangleListType.TriangleStrip:
-					GL.Begin(BeginMode.TriangleStrip);
+					gl.Begin(BeginMode.TriangleStrip);
 					break;
 			}
 		}
 
 		public void EndCallBack()
 		{
-			GL.End();
+			gl.End();
 		}
 
 		public void VertexCallBack(int index)
 		{
-			GL.Vertex2(verticesCache[index].X, verticesCache[index].Y);
+			gl.Vertex2(verticesCache[index].X, verticesCache[index].Y);
 		}
 
 		public int CombineCallBack(double[] coords3, int[] data4, double[] weight4)

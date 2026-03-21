@@ -30,6 +30,7 @@ either expressed or implied, of the FreeBSD Project.
 using System;
 using MatterHackers.Agg;
 using MatterHackers.PolygonMesh;
+using MatterHackers.RenderGl.OpenGl;
 using MatterHackers.VectorMath;
 
 namespace MatterHackers.RenderGl
@@ -41,7 +42,7 @@ namespace MatterHackers.RenderGl
 
 	public static class OverhangRender
 	{
-		public static void EnsureUpdated(Mesh meshToRender, Matrix4X4 transform)
+		public static void EnsureUpdated(GL gl, Mesh meshToRender, Matrix4X4 transform)
 		{
 			var faces = meshToRender.Faces;
 
@@ -69,6 +70,7 @@ namespace MatterHackers.RenderGl
 
 			// change the color to be the right thing per face normal
 			MeshTrianglePlugin.Get(
+				gl,
 				meshToRender,
 				(normal) =>
 				{

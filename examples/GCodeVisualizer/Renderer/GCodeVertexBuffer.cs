@@ -43,8 +43,8 @@ namespace MatterHackers.GCodeVisualizer
 		public int myVertexLength;
 		public GCodeVertexBuffer()
 		{
-			myVertexId = GL.GenBuffer();
-			myIndexId= GL.GenBuffer();
+			myVertexId = GL.Instance.GenBuffer();
+			myIndexId= GL.Instance.GenBuffer();
 		}
 
 		public void Dispose()
@@ -55,8 +55,8 @@ namespace MatterHackers.GCodeVisualizer
 				int holdIndexId = myIndexId;
 				UiThread.RunOnIdle(() =>
 				{
-					GL.DeleteBuffer(holdVertexId);
-					GL.DeleteBuffer(holdIndexId);
+					GL.Instance.DeleteBuffer(holdVertexId);
+					GL.Instance.DeleteBuffer(holdIndexId);
 				});
 
 				myVertexId = -1;
@@ -70,31 +70,31 @@ namespace MatterHackers.GCodeVisualizer
 
 		public void renderRange(int offset, int count)
 		{
-			GL.EnableClientState(ArrayCap.ColorArray);
-			GL.EnableClientState(ArrayCap.NormalArray);
-			GL.EnableClientState(ArrayCap.VertexArray);
-			GL.DisableClientState(ArrayCap.TextureCoordArray);
-			GL.Disable(EnableCap.Texture2D);
+			GL.Instance.EnableClientState(ArrayCap.ColorArray);
+			GL.Instance.EnableClientState(ArrayCap.NormalArray);
+			GL.Instance.EnableClientState(ArrayCap.VertexArray);
+			GL.Instance.DisableClientState(ArrayCap.TextureCoordArray);
+			GL.Instance.Disable(EnableCap.Texture2D);
 
-			GL.EnableClientState(ArrayCap.IndexArray);
+			GL.Instance.EnableClientState(ArrayCap.IndexArray);
 
-			GL.BindBuffer(BufferTarget.ArrayBuffer, myVertexId);
-			GL.BindBuffer(BufferTarget.ElementArrayBuffer, myIndexId);
+			GL.Instance.BindBuffer(BufferTarget.ArrayBuffer, myVertexId);
+			GL.Instance.BindBuffer(BufferTarget.ElementArrayBuffer, myIndexId);
 
-			GL.ColorPointer(4, ColorPointerType.UnsignedByte, ColorVertexData.Stride, new IntPtr(0));
-			GL.NormalPointer(NormalPointerType.Float, ColorVertexData.Stride, new IntPtr(4));
-			GL.VertexPointer(3, VertexPointerType.Float, ColorVertexData.Stride, new IntPtr(4 + 3 * 4));
+			GL.Instance.ColorPointer(4, ColorPointerType.UnsignedByte, ColorVertexData.Stride, new IntPtr(0));
+			GL.Instance.NormalPointer(NormalPointerType.Float, ColorVertexData.Stride, new IntPtr(4));
+			GL.Instance.VertexPointer(3, VertexPointerType.Float, ColorVertexData.Stride, new IntPtr(4 + 3 * 4));
 
-			GL.DrawRangeElements(myMode, 0, myIndexLength, count, DrawElementsType.UnsignedInt, new IntPtr(offset * 4));
+			GL.Instance.DrawRangeElements(myMode, 0, myIndexLength, count, DrawElementsType.UnsignedInt, new IntPtr(offset * 4));
 
-			GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
-			GL.BindBuffer(BufferTarget.ElementArrayBuffer, 0);
+			GL.Instance.BindBuffer(BufferTarget.ArrayBuffer, 0);
+			GL.Instance.BindBuffer(BufferTarget.ElementArrayBuffer, 0);
 
-			GL.DisableClientState(ArrayCap.IndexArray);
+			GL.Instance.DisableClientState(ArrayCap.IndexArray);
 
-			GL.DisableClientState(ArrayCap.VertexArray);
-			GL.DisableClientState(ArrayCap.NormalArray);
-			GL.DisableClientState(ArrayCap.ColorArray);
+			GL.Instance.DisableClientState(ArrayCap.VertexArray);
+			GL.Instance.DisableClientState(ArrayCap.NormalArray);
+			GL.Instance.DisableClientState(ArrayCap.ColorArray);
 		}
 
 		public void SetIndexData(int[] data)
@@ -105,12 +105,12 @@ namespace MatterHackers.GCodeVisualizer
 		public void SetIndexData(int[] data, int count)
 		{
 			myIndexLength = count;
-			GL.BindBuffer(BufferTarget.ElementArrayBuffer, myIndexId);
+			GL.Instance.BindBuffer(BufferTarget.ElementArrayBuffer, myIndexId);
 			unsafe
 			{
 				fixed (int* dataPointer = data)
 				{
-					GL.BufferData(BufferTarget.ElementArrayBuffer, data.Length * sizeof(int), (IntPtr)dataPointer, BufferUsageHint.StaticDraw);
+					GL.Instance.BufferData(BufferTarget.ElementArrayBuffer, data.Length * sizeof(int), (IntPtr)dataPointer, BufferUsageHint.StaticDraw);
 				}
 			}
 		}
@@ -123,12 +123,12 @@ namespace MatterHackers.GCodeVisualizer
 		public void SetVertexData(ColorVertexData[] data, int count)
 		{
 			myVertexLength = count;
-			GL.BindBuffer(BufferTarget.ArrayBuffer, myVertexId);
+			GL.Instance.BindBuffer(BufferTarget.ArrayBuffer, myVertexId);
 			unsafe
 			{
 				fixed (ColorVertexData* dataPointer = data)
 				{
-					GL.BufferData(BufferTarget.ArrayBuffer, data.Length * ColorVertexData.Stride, (IntPtr)dataPointer, BufferUsageHint.StaticDraw);
+					GL.Instance.BufferData(BufferTarget.ArrayBuffer, data.Length * ColorVertexData.Stride, (IntPtr)dataPointer, BufferUsageHint.StaticDraw);
 				}
 			}
 		}

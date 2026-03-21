@@ -200,7 +200,7 @@ namespace MatterHackers.GCodeVisualizer
 				if (graphics2DGl != null)
 				{
 					graphics2DGl.PreRender(Color.White);
-					GL.Begin(BeginMode.Triangles);
+					GL.Instance.Begin(BeginMode.Triangles);
 					for (int i = startFeature; i < endFeature; i++)
 					{
 						RenderFeatureBase feature = renderFeatures[renderInfo.EndLayerIndex][i];
@@ -209,7 +209,7 @@ namespace MatterHackers.GCodeVisualizer
 							feature.Render(graphics2DGl, renderInfo);
 						}
 					}
-					GL.End();
+					GL.Instance.End();
 					graphics2DGl.PopOrthoProjection();
 				}
 				else
@@ -316,10 +316,10 @@ namespace MatterHackers.GCodeVisualizer
 					}
 				}
 
-				GL.Disable(EnableCap.Texture2D);
-				GL.PushAttrib(AttribMask.EnableBit);
-				GL.DisableClientState(ArrayCap.TextureCoordArray);
-				GL.Enable(EnableCap.PolygonSmooth);
+				GL.Instance.Disable(EnableCap.Texture2D);
+				GL.Instance.PushAttrib(AttribMask.EnableBit);
+				GL.Instance.DisableClientState(ArrayCap.TextureCoordArray);
+				GL.Instance.Enable(EnableCap.PolygonSmooth);
 
 				if (renderInfo.EndLayerIndex - 1 > renderInfo.StartLayerIndex)
 				{
@@ -362,7 +362,7 @@ namespace MatterHackers.GCodeVisualizer
 						layerVertexBuffer[layerIndex].renderRange(featureStartIndex[layerIndex][startFeature], ellementCount);
 					}
 				}
-				GL.PopAttrib();
+				GL.Instance.PopAttrib();
 			}
 		}
 	}

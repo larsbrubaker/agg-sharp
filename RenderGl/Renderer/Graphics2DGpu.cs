@@ -46,6 +46,8 @@ namespace MatterHackers.RenderGl
 	// NOTE: GL render path is deprecated and will be removed. D3D is the active render path.
 	public class Graphics2DGpu : Graphics2D
 	{
+        public readonly GL gl;
+
         // We can have a single static instance because all gl rendering is required to happen on the ui thread so there can
         // be no runtime contention for this object (no thread contention).
         private static readonly Dictionary<ulong, AARenderTesselator> TriangleEdgeInfos = new Dictionary<ulong, AARenderTesselator>();
@@ -53,7 +55,7 @@ namespace MatterHackers.RenderGl
         private static readonly Dictionary<ulong, Mesh> NativeScenePathMeshes = new Dictionary<ulong, Mesh>();
         private static List<ImageBuffer> aATextureImages;
 
-        private static readonly RenderTesselator RenderNowTesselator = new RenderTesselator();
+        private static RenderTesselator RenderNowTesselator;
 
         private readonly int width;
         private readonly int height;
@@ -76,21 +78,28 @@ namespace MatterHackers.RenderGl
             ImageTexturePlugin.MarkAllImagesNeedRefresh();
         }
 
-        public Graphics2DGpu(double deviceScale)
+        public Graphics2DGpu(GL gl, double deviceScale)
         {
+            this.gl = gl;
+
+            if (RenderNowTesselator == null)
+            {
+                RenderNowTesselator = new RenderTesselator(gl);
+            }
+
             if (AvailableTriangleEdgeInfos.Count == 0)
             {
                 for (int i = 0; i < 1000; i++)
                 {
-                    AvailableTriangleEdgeInfos.Add(new AARenderTesselator());
+                    AvailableTriangleEdgeInfos.Add(new AARenderTesselator(gl));
                 }
             }
 
             DeviceScale = deviceScale;
         }
 
-        public Graphics2DGpu(int width, int height, double deviceScale)
-            : this(deviceScale)
+        public Graphics2DGpu(GL gl, int width, int height, double deviceScale)
+            : this(gl, deviceScale)
         {
             this.width = width;
             this.height = height;
@@ -102,13 +111,13 @@ namespace MatterHackers.RenderGl
         public override void SetClippingRect(RectangleDouble clippingRect)
         {
             cachedClipRect = clippingRect;
-            GL.Scissor(
+            gl.Scissor(
                 (int)Math.Floor(Math.Max(clippingRect.Left, 0)),
                 (int)Math.Floor(Math.Max(clippingRect.Bottom, 0)),
                 (int)Math.Ceiling(Math.Max(clippingRect.Width, 0)),
                 (int)Math.Ceiling(Math.Max(clippingRect.Height, 0))
             );
-            GL.Enable(EnableCap.ScissorTest);
+            gl.Enable(EnableCap.ScissorTest);
         }
 
         public override IScanlineCache ScanlineCache
@@ -123,24 +132,24 @@ namespace MatterHackers.RenderGl
 
         public void PushOrthoProjection()
         {
-            GL.Disable(EnableCap.CullFace);
+            gl.Disable(EnableCap.CullFace);
 
-            GL.MatrixMode(MatrixMode.Projection);
-            GL.PushMatrix();
-            GL.LoadIdentity();
-            GL.Ortho(0, width, 0, height, 0, 1);
+            gl.MatrixMode(MatrixMode.Projection);
+            gl.PushMatrix();
+            gl.LoadIdentity();
+            gl.Ortho(0, width, 0, height, 0, 1);
 
-            GL.MatrixMode(MatrixMode.Modelview);
-            GL.PushMatrix();
-            GL.LoadIdentity();
+            gl.MatrixMode(MatrixMode.Modelview);
+            gl.PushMatrix();
+            gl.LoadIdentity();
         }
 
         public void PopOrthoProjection()
         {
-            GL.MatrixMode(MatrixMode.Projection);
-            GL.PopMatrix();
-            GL.MatrixMode(MatrixMode.Modelview);
-            GL.PopMatrix();
+            gl.MatrixMode(MatrixMode.Projection);
+            gl.PopMatrix();
+            gl.MatrixMode(MatrixMode.Modelview);
+            gl.PopMatrix();
         }
 
         private void CheckLineImageCache()
@@ -254,10 +263,10 @@ namespace MatterHackers.RenderGl
             return transform.sx == 1 && transform.sy == 1 && transform.shx == 0 && transform.shy == 0;
         }
 
-        private static void SetColor(IColorType colorIn)
+        private void SetColor(IColorType colorIn)
         {
             var colorBytes = colorIn.ToColor();
-            GL.Color4(colorBytes.red, colorBytes.green, colorBytes.blue, (byte)255);
+            gl.Color4(colorBytes.red, colorBytes.green, colorBytes.blue, (byte)255);
         }
 
         private static void MoveTriangleEdgeInfos()
@@ -276,13 +285,13 @@ namespace MatterHackers.RenderGl
             return triangleEdgeInfo;
         }
 
-        private static void RenderTriangleEdgeInfo(AARenderTesselator triangleEdgeInfo, Vector2 translation)
+        private void RenderTriangleEdgeInfo(AARenderTesselator triangleEdgeInfo, Vector2 translation)
         {
             //using (new RecursiveReportTimer("Graphics2DOpenGl.RenderLastToGL"))
             {
-                GL.Translate(translation.X, translation.Y, 0);
+                gl.Translate(translation.X, translation.Y, 0);
                 triangleEdgeInfo.RenderLastToGL();
-                GL.Translate(-translation.X, -translation.Y, 0);
+                gl.Translate(-translation.X, -translation.Y, 0);
             }
         }
 
@@ -302,13 +311,13 @@ namespace MatterHackers.RenderGl
                         if (!_displayListCache.TryGetValue(cacheKey, out displayListId))
                         {
                             // Create a new display list
-                            displayListId = GL.GenLists(1);
-                            GL.NewList(displayListId, GL.GL_COMPILE);
+                            displayListId = gl.GenLists(1);
+                            gl.NewList(displayListId, GL.GL_COMPILE);
 
                             // Perform the rendering
                             triangleEdgeInfo.RenderLastToGL();
 
-                            GL.EndList();
+                            gl.EndList();
 
                             // Add to cache
                             AddToCache(cacheKey, displayListId);
@@ -319,15 +328,15 @@ namespace MatterHackers.RenderGl
                         }
 
                         // Call the cached display list
-                        GL.Translate(translation.X, translation.Y, 0);
-                        GL.CallList(displayListId);
-                        GL.Translate(-translation.X, -translation.Y, 0);
+                        gl.Translate(translation.X, translation.Y, 0);
+                        gl.CallList(displayListId);
+                        gl.Translate(-translation.X, -translation.Y, 0);
                     }
                     else
                     {
-                        GL.Translate(translation.X, translation.Y, 0);
+                        gl.Translate(translation.X, translation.Y, 0);
                         triangleEdgeInfo.RenderLastToGL();
-                        GL.Translate(-translation.X, -translation.Y, 0);
+                        gl.Translate(-translation.X, -translation.Y, 0);
                     }
                 }
             }
@@ -340,7 +349,7 @@ namespace MatterHackers.RenderGl
                 // Clear and release all cached display lists if the cache size exceeds the limit
                 foreach (var id in _displayListCache.Values)
                 {
-                    GL.DeleteLists(id, 1);
+                    gl.DeleteLists(id, 1);
                 }
                 _displayListCache.Clear();
             }
@@ -353,10 +362,10 @@ namespace MatterHackers.RenderGl
             CheckLineImageCache();
             PushOrthoProjection();
 
-            GL.Enable(EnableCap.Texture2D);
-            GL.BindTexture(TextureTarget.Texture2D, RenderGl.ImageTexturePlugin.GetImageTexturePlugin(aATextureImages[colorIn.Alpha0To255], false).GLTextureHandle);
-            GL.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
-            GL.Enable(EnableCap.Blend);
+            gl.Enable(EnableCap.Texture2D);
+            gl.BindTexture(TextureTarget.Texture2D, RenderGl.ImageTexturePlugin.GetImageTexturePlugin(gl, aATextureImages[colorIn.Alpha0To255], false).GLTextureHandle);
+            gl.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
+            gl.Enable(EnableCap.Blend);
         }
 
         public override void Render(IVertexSource vertexSource, IColorType colorIn)
@@ -413,20 +422,20 @@ namespace MatterHackers.RenderGl
             }
 
             var sourceAsImageBuffer = (ImageBuffer)source;
-            var glPlugin = ImageTexturePlugin.GetImageTexturePlugin(sourceAsImageBuffer, false);
+            var glPlugin = ImageTexturePlugin.GetImageTexturePlugin(gl, sourceAsImageBuffer, false);
 
             PushOrthoProjection();
-            GL.Disable(EnableCap.Lighting);
-            GL.Enable(EnableCap.Texture2D);
-            GL.Disable(EnableCap.DepthTest);
-            GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
+            gl.Disable(EnableCap.Lighting);
+            gl.Enable(EnableCap.Texture2D);
+            gl.Disable(EnableCap.DepthTest);
+            gl.Enable(EnableCap.Blend);
+            gl.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
 
-            GL.Translate(x, y, 0);
-            GL.Rotate(MathHelper.RadiansToDegrees(angleRadians), 0, 0, 1);
-            GL.Scale(scaleX, scaleY, 1);
+            gl.Translate(x, y, 0);
+            gl.Rotate(MathHelper.RadiansToDegrees(angleRadians), 0, 0, 1);
+            gl.Scale(scaleX, scaleY, 1);
 
-            GL.Color4(Color.White);
+            gl.Color4(Color.White);
             glPlugin.DrawToGL();
 
             PopOrthoProjection();
@@ -492,11 +501,11 @@ namespace MatterHackers.RenderGl
             {
                 PushOrthoProjection();
 
-                GL.Disable(EnableCap.Texture2D);
-                GL.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
-                GL.EnableOrDisable(EnableCap.Blend, fillColor.Alpha0To255 < 255);
+                gl.Disable(EnableCap.Texture2D);
+                gl.BlendFunc(BlendingFactorSrc.SrcAlpha, BlendingFactorDest.OneMinusSrcAlpha);
+                gl.EnableOrDisable(EnableCap.Blend, fillColor.Alpha0To255 < 255);
 
-                GL.Color4(fillColor.Red0To255, fillColor.Green0To255, fillColor.Blue0To255, fillColor.Alpha0To255);
+                gl.Color4(fillColor.Red0To255, fillColor.Green0To255, fillColor.Blue0To255, fillColor.Alpha0To255);
 
                 DrawRectangle(fastLeft, fastBottom, fastRight, fastTop);
 
@@ -509,19 +518,19 @@ namespace MatterHackers.RenderGl
             }
         }
 
-        private static void DrawRectangle(double fastLeft, double fastBottom, double fastRight, double fastTop)
+        private void DrawRectangle(double fastLeft, double fastBottom, double fastRight, double fastTop)
         {
-            GL.Begin(BeginMode.Triangles);
+            gl.Begin(BeginMode.Triangles);
 
-            GL.Vertex2(fastLeft, fastBottom);
-            GL.Vertex2(fastRight, fastBottom);
-            GL.Vertex2(fastRight, fastTop);
+            gl.Vertex2(fastLeft, fastBottom);
+            gl.Vertex2(fastRight, fastBottom);
+            gl.Vertex2(fastRight, fastTop);
 
-            GL.Vertex2(fastLeft, fastBottom);
-            GL.Vertex2(fastRight, fastTop);
-            GL.Vertex2(fastLeft, fastTop);
+            gl.Vertex2(fastLeft, fastBottom);
+            gl.Vertex2(fastRight, fastTop);
+            gl.Vertex2(fastLeft, fastTop);
 
-            GL.End();
+            gl.End();
         }
 
         public override void Line(double x1, double y1, double x2, double y2, Color color, double strokeWidth = 1)
@@ -584,10 +593,10 @@ namespace MatterHackers.RenderGl
 
         public void RenderTransformedPath(Matrix4X4 transform, IVertexSource path, Color color, bool doDepthTest)
         {
-            if (GL.Instance is INativeSceneRenderer nativeSceneRenderer
+            if (gl?.GpuContext is INativeSceneRenderer nativeSceneRenderer
                 && nativeSceneRenderer.IsSceneRenderingActive)
             {
-                GL.EnableOrDisable(EnableCap.DepthTest, doDepthTest);
+                gl.EnableOrDisable(EnableCap.DepthTest, doDepthTest);
 
                 var mesh = GetOrCreateNativeScenePathMesh(path);
                 if (mesh.Faces.Count > 0)
@@ -613,22 +622,22 @@ namespace MatterHackers.RenderGl
             }
 
             CheckLineImageCache();
-            GL.Enable(EnableCap.Texture2D);
-            GL.BindTexture(TextureTarget.Texture2D, RenderGl.ImageTexturePlugin.GetImageTexturePlugin(aATextureImages[color.Alpha0To255], false).GLTextureHandle);
-            GL.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
-            GL.Enable(EnableCap.Blend);
-            GL.Disable(EnableCap.CullFace);
+            gl.Enable(EnableCap.Texture2D);
+            gl.BindTexture(TextureTarget.Texture2D, RenderGl.ImageTexturePlugin.GetImageTexturePlugin(gl, aATextureImages[color.Alpha0To255], false).GLTextureHandle);
+            gl.BlendFunc(BlendingFactorSrc.One, BlendingFactorDest.OneMinusSrcAlpha);
+            gl.Enable(EnableCap.Blend);
+            gl.Disable(EnableCap.CullFace);
 
-            GL.MatrixMode(MatrixMode.Modelview);
-            GL.PushMatrix();
-            GL.MultMatrix(transform.GetAsFloatArray());
-            GL.EnableOrDisable(EnableCap.DepthTest, doDepthTest);
+            gl.MatrixMode(MatrixMode.Modelview);
+            gl.PushMatrix();
+            gl.MultMatrix(transform.GetAsFloatArray());
+            gl.EnableOrDisable(EnableCap.DepthTest, doDepthTest);
 
             affineTransformStack.Push(Affine.NewIdentity());
             DrawAAShape(path, color, false);
             affineTransformStack.Pop();
 
-            GL.PopMatrix();
+            gl.PopMatrix();
         }
 
         private static RectangleDouble TransformRectangle(RectangleDouble rect, Affine transform)

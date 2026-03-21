@@ -35,34 +35,37 @@ namespace MatterHackers.RenderGl
 {
 	public class AARenderTesselator : CachedTesselator
 	{
+		private readonly GL gl;
 		private Vector2 fanPStart;
 		private Vector2 fanTStart;
 		private Vector2 fanPNext;
 		private Vector2 fanTNext;
 		private WorldView world;
 
-		public AARenderTesselator()
+		public AARenderTesselator(GL gl)
 		{
+			this.gl = gl;
 		}
 
-		public AARenderTesselator(WorldView world)
+		public AARenderTesselator(GL gl, WorldView world)
 		{
+			this.gl = gl;
 			this.world = world;
 		}
 
 		protected void DrawNonAATriangle(Vector2 p0, Vector2 p1, Vector2 p2)
 		{
 			// P1
-			GL.TexCoord2(.2, .25);
-			GL.Vertex2(p0.X, p0.Y);
+			gl.TexCoord2(.2, .25);
+			gl.Vertex2(p0.X, p0.Y);
 
 			// P2
-			GL.TexCoord2(.2, .75);
-			GL.Vertex2(p1.X, p1.Y);
+			gl.TexCoord2(.2, .75);
+			gl.Vertex2(p1.X, p1.Y);
 
 			// P3
-			GL.TexCoord2(.9, .5);
-			GL.Vertex2(p2.X, p2.Y);
+			gl.TexCoord2(.9, .5);
+			gl.Vertex2(p2.X, p2.Y);
 		}
 
 		/// <summary>
@@ -135,14 +138,14 @@ namespace MatterHackers.RenderGl
 
 		private void FanDo(Vector2 fanTEnd, Vector2 fanPEnd)
 		{
-			GL.TexCoord2(fanTStart.X, fanTStart.Y);
-			GL.Vertex2(fanPStart.X, fanPStart.Y);
+			gl.TexCoord2(fanTStart.X, fanTStart.Y);
+			gl.Vertex2(fanPStart.X, fanPStart.Y);
 
-			GL.TexCoord2(fanTNext.X, fanTNext.Y);
-			GL.Vertex2(fanPNext.X, fanPNext.Y);
+			gl.TexCoord2(fanTNext.X, fanTNext.Y);
+			gl.Vertex2(fanPNext.X, fanPNext.Y);
 
-			GL.TexCoord2(fanTEnd.X, fanTEnd.Y);
-			GL.Vertex2(fanPEnd.X, fanPEnd.Y);
+			gl.TexCoord2(fanTEnd.X, fanTEnd.Y);
+			gl.Vertex2(fanPEnd.X, fanPEnd.Y);
 
 			fanTNext = fanTEnd;
 			fanPNext = fanPEnd;
@@ -177,7 +180,7 @@ namespace MatterHackers.RenderGl
 
 		public void RenderLastToGL()
 		{
-			GL.Begin(BeginMode.Triangles);
+			gl.Begin(BeginMode.Triangles);
 
 			int numIndicies = IndicesCache.Count;
 			for (int i = 0; i < numIndicies; i += 3)
@@ -240,7 +243,7 @@ namespace MatterHackers.RenderGl
 				}
 			}
 
-			GL.End();
+			gl.End();
 		}
 	}
 }

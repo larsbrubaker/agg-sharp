@@ -50,6 +50,7 @@ namespace MatterHackers.Agg.UI
 		/// </summary>
 		public static List<int> ScreenshotAtFrames { get; set; } = new List<int>();
 
+		public D3D11Control D3DControl => d3dControl;
 		private D3D11Control d3dControl;
 		private bool doneLoading = false;
 		private bool viewPortHasBeenSet = false;
@@ -72,7 +73,6 @@ namespace MatterHackers.Agg.UI
 			base.OnLoad(e);
 
 			d3dControl.InitializeD3D();
-			GL.Instance = d3dControl.GlBackend;
 
 			// Clear all cached GL resources (display lists, textures, tessellations)
 			// that may be stale from a previous GL context (e.g., between automation tests).
@@ -221,7 +221,6 @@ namespace MatterHackers.Agg.UI
 				var dummy1 = this.Handle;
 				var dummy2 = d3dControl.Handle;
 				d3dControl.InitializeD3D();
-				GL.Instance = d3dControl.GlBackend;
 			}
 		}
 
@@ -253,7 +252,7 @@ namespace MatterHackers.Agg.UI
 
 		private void SetAndClearViewPort()
 		{
-			var gl = GL.Instance;
+			var gl = d3dControl.Gl?.GpuContext;
 			if (gl == null) return;
 
 			gl.Viewport(0, 0, this.ClientSize.Width, this.ClientSize.Height);
@@ -276,7 +275,7 @@ namespace MatterHackers.Agg.UI
 				SetAndClearViewPort();
 			}
 
-			Graphics2D graphics2D = new Graphics2DGpu(this.ClientSize.Width, this.ClientSize.Height, GuiWidget.DeviceScale);
+			Graphics2D graphics2D = new Graphics2DGpu(d3dControl.Gl, this.ClientSize.Width, this.ClientSize.Height, GuiWidget.DeviceScale);
 			graphics2D.PushTransform();
 
 			return graphics2D;

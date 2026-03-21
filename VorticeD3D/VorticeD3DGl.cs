@@ -45,6 +45,11 @@ namespace MatterHackers.RenderGl
 {
 	public partial class VorticeD3DGl : IGpuContext, INativeSceneRenderer
 	{
+		/// <summary>
+		/// The GL wrapper that owns this GPU context. Set by D3D11Control after construction.
+		/// </summary>
+		public GL OwnerGl { get; set; }
+
 		private ID3D11Device device;
 		private ID3D11DeviceContext context;
 		private IDXGISwapChain swapChain;

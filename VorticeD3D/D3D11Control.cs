@@ -45,6 +45,7 @@ namespace MatterHackers.RenderGl
 		public ID3D11DeviceContext DeviceContext { get; private set; }
 		public IDXGISwapChain SwapChain { get; private set; }
 		public VorticeD3DGl GlBackend { get; private set; }
+		public MatterHackers.RenderGl.OpenGl.GL Gl { get; private set; }
 
 		private bool isInitialized;
 		private bool isRecoveringDevice;
@@ -114,6 +115,8 @@ namespace MatterHackers.RenderGl
 
 			GlBackend = new VorticeD3DGl();
 			GlBackend.Initialize(Device, DeviceContext, SwapChain);
+			Gl = new MatterHackers.RenderGl.OpenGl.GL(GlBackend);
+			GlBackend.OwnerGl = Gl;
 		}
 
 		protected override bool IsInputKey(Keys keyData)
@@ -175,7 +178,8 @@ namespace MatterHackers.RenderGl
 				CreateDeviceResources();
 				isInitialized = true;
 
-                MatterHackers.RenderGl.OpenGl.GL.Instance = GlBackend;
+                Gl = new MatterHackers.RenderGl.OpenGl.GL(GlBackend);
+                GlBackend.OwnerGl = Gl;
 				Graphics2DGpu.InvalidateGlCaches();
 
 				return true;

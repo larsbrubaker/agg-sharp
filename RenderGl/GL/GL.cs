@@ -30,15 +30,18 @@ either expressed or implied, of the FreeBSD Project.
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 using MatterHackers.Agg;
 using MatterHackers.PolygonMesh;
 using MatterHackers.VectorMath;
 
 namespace MatterHackers.RenderGl.OpenGl
 {
-    // NOTE: GL render path is deprecated and will be removed. D3D is the active render path.
-    public static class GL
+    /// <summary>
+    /// GPU context facade wrapping an IGpuContext with state tracking.
+    /// Each instance has its own tracking state (enable flags, matrix/attrib push counts),
+    /// enabling isolated off-screen rendering without corrupting the main viewport state.
+    /// </summary>
+    public class GL
     {
         #region constants
         public const int ALWAYS = 0x0207;
@@ -75,121 +78,100 @@ namespace MatterHackers.RenderGl.OpenGl
         #endregion constants
 
 
-        private static readonly Dictionary<int, bool> IsEnabled = new Dictionary<int, bool>();
-        private static IGpuContext _instance = null;
-        private static bool inBegin;
-        private static int pushAttribCount = 0;
-        private static Dictionary<MatrixMode, int> pushMatrixCount = new Dictionary<MatrixMode, int>()
+        private readonly Dictionary<int, bool> isEnabled = new Dictionary<int, bool>();
+        private bool inBegin;
+        private int pushAttribCount = 0;
+        private Dictionary<MatrixMode, int> pushMatrixCount = new Dictionary<MatrixMode, int>()
         {
             [OpenGl.MatrixMode.Modelview] = 0,
             [OpenGl.MatrixMode.Projection] = 0,
         };
 
-        private static int threadId = -1;
-        private static MatrixMode matrixMode = OpenGl.MatrixMode.Modelview;
+        private MatrixMode matrixMode = OpenGl.MatrixMode.Modelview;
 
-        public static IGpuContext Instance
+        /// <summary>
+        /// The underlying GPU context implementation (e.g. VorticeD3DGl).
+        /// </summary>
+        public IGpuContext GpuContext { get; set; }
+
+        public GL(IGpuContext gpuContext = null)
         {
-            get
-            {
-                if (threadId == -1)
-                {
-                    threadId = Thread.CurrentThread.ManagedThreadId;
-                }
-
-                if (Thread.CurrentThread.ManagedThreadId != threadId)
-                {
-                    throw new Exception("You must only call GL on the main thread.");
-                }
-
-                if (_instance != null)
-                {
-                    CheckForError();
-                }
-
-                return _instance;
-            }
-
-            set
-            {
-                _instance = value;
-                threadId = Thread.CurrentThread.ManagedThreadId;
-            }
+            GpuContext = gpuContext;
         }
 
-        public static void Begin(BeginMode mode)
+        public void Begin(BeginMode mode)
         {
             inBegin = true;
-            Instance?.Begin(mode);
+            GpuContext?.Begin(mode);
             CheckForError();
         }
 
-        public static void BindVertexArray(int array)
+        public void BindVertexArray(int array)
         {
-            Instance?.BindVertexArray(array);
+            GpuContext?.BindVertexArray(array);
         }
 
-        public static void BindBuffer(BufferTarget target, int buffer)
+        public void BindBuffer(BufferTarget target, int buffer)
         {
             BindBuffer((int)target, buffer);
         }
 
-        public static void BindBuffer(int target, int buffer)
+        public void BindBuffer(int target, int buffer)
         {
-            Instance?.BindBuffer(target, buffer);
+            GpuContext?.BindBuffer(target, buffer);
             CheckForError();
         }
 
-        public static void BindFramebuffer(int target, int buffer)
+        public void BindFramebuffer(int target, int buffer)
         {
-            Instance?.BindFramebuffer(target, buffer);
+            GpuContext?.BindFramebuffer(target, buffer);
             CheckForError();
         }
 
-        public static void BindTexture(int target, int texture)
+        public void BindTexture(int target, int texture)
         {
-            Instance?.BindTexture(target, texture);
+            GpuContext?.BindTexture(target, texture);
             CheckForError();
         }
 
-        public static void BindTexture(TextureTarget target, int texture)
+        public void BindTexture(TextureTarget target, int texture)
         {
             BindTexture((int)target, texture);
         }
 
-        public static void BlendFunc(BlendingFactorSrc sfactor, BlendingFactorDest dfactor)
+        public void BlendFunc(BlendingFactorSrc sfactor, BlendingFactorDest dfactor)
         {
             BlendFunc((int)sfactor, (int)dfactor);
         }
 
-        public static void BlendFunc(int sfactor, int dfactor)
+        public void BlendFunc(int sfactor, int dfactor)
         {
-            Instance?.BlendFunc(sfactor, dfactor);
+            GpuContext?.BlendFunc(sfactor, dfactor);
             CheckForError();
         }
 
-        public static void BufferData(int target, int size, IntPtr data, int usage)
+        public void BufferData(int target, int size, IntPtr data, int usage)
         {
-            Instance?.BufferData(target, size, data, usage);
+            GpuContext?.BufferData(target, size, data, usage);
             CheckForError();
         }
 
-        public static void BufferData(BufferTarget target, int size, IntPtr data, BufferUsageHint usage)
+        public void BufferData(BufferTarget target, int size, IntPtr data, BufferUsageHint usage)
         {
             BufferData((int)target, size, data, (int)usage);
         }
 
-        public static void CheckForError()
+        public void CheckForError()
         {
 #if DEBUG
-            if (_instance == null)
+            if (GpuContext == null)
             {
                 return;
             }
 
             if (!inBegin)
             {
-                var code = _instance.GetError();
+                var code = GpuContext.GetError();
                 if (code != ErrorCode.NoError)
                 {
                     throw new Exception($"GL Error: {code}");
@@ -198,52 +180,52 @@ namespace MatterHackers.RenderGl.OpenGl
 #endif
         }
 
-        public static void Clear(ClearBufferMask mask)
+        public void Clear(ClearBufferMask mask)
         {
             Clear((int)mask);
         }
 
-        public static void Clear(int mask)
+        public void Clear(int mask)
         {
-            Instance?.Clear(mask);
+            GpuContext?.Clear(mask);
             CheckForError();
         }
 
-        public static void ClearDepth(double depth)
+        public void ClearDepth(double depth)
         {
-            Instance?.ClearDepth(depth);
+            GpuContext?.ClearDepth(depth);
             CheckForError();
         }
 
-        public static void Color4(Color color)
+        public void Color4(Color color)
         {
             Color4(color.red, color.green, color.blue, color.alpha);
         }
 
-        public static void Color4(int red, int green, int blue, int alpha)
+        public void Color4(int red, int green, int blue, int alpha)
         {
             Color4((byte)red, (byte)green, (byte)blue, (byte)alpha);
         }
 
-        public static void Color4(byte red, byte green, byte blue, byte alpha)
+        public void Color4(byte red, byte green, byte blue, byte alpha)
         {
-            Instance?.Color4(red, green, blue, alpha);
+            GpuContext?.Color4(red, green, blue, alpha);
             CheckForError();
         }
 
-        public static void ColorMask(bool red, bool green, bool blue, bool alpha)
+        public void ColorMask(bool red, bool green, bool blue, bool alpha)
         {
-            Instance?.ColorMask(red, green, blue, alpha);
+            GpuContext?.ColorMask(red, green, blue, alpha);
             CheckForError();
         }
 
-        public static void ColorMaterial(MaterialFace face, ColorMaterialParameter mode)
+        public void ColorMaterial(MaterialFace face, ColorMaterialParameter mode)
         {
-            Instance?.ColorMaterial(face, mode);
+            GpuContext?.ColorMaterial(face, mode);
             CheckForError();
         }
 
-        public static void ColorPointer(int size, ColorPointerType type, int stride, byte[] pointer)
+        public void ColorPointer(int size, ColorPointerType type, int stride, byte[] pointer)
         {
             unsafe
             {
@@ -254,148 +236,148 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static void ColorPointer(int size, ColorPointerType type, int stride, IntPtr pointer)
+        public void ColorPointer(int size, ColorPointerType type, int stride, IntPtr pointer)
         {
-            Instance?.ColorPointer(size, type, stride, pointer);
+            GpuContext?.ColorPointer(size, type, stride, pointer);
             CheckForError();
         }
 
-        public static void CullFace(CullFaceMode mode)
+        public void CullFace(CullFaceMode mode)
         {
-            Instance?.CullFace(mode);
+            GpuContext?.CullFace(mode);
             CheckForError();
         }
 
-        public static void DeleteBuffer(int buffer)
+        public void DeleteBuffer(int buffer)
         {
-            Instance?.DeleteBuffer(buffer);
+            GpuContext?.DeleteBuffer(buffer);
             CheckForError();
         }
 
-        public static void DeleteTexture(int textures)
+        public void DeleteTexture(int textures)
         {
-            Instance?.DeleteTexture(textures);
+            GpuContext?.DeleteTexture(textures);
             CheckForError();
         }
 
-        public static void DepthFunc(DepthFunction func)
+        public void DepthFunc(DepthFunction func)
         {
             DepthFunc((int)func);
             CheckForError();
         }
 
-        public static void DepthFunc(int func)
+        public void DepthFunc(int func)
         {
-            Instance?.DepthFunc(func);
+            GpuContext?.DepthFunc(func);
             CheckForError();
         }
 
-        public static void DepthMask(bool flag)
+        public void DepthMask(bool flag)
         {
-            Instance?.DepthMask(flag);
+            GpuContext?.DepthMask(flag);
             CheckForError();
         }
 
-        public static void Disable(int cap)
+        public void Disable(int cap)
         {
-            IsEnabled[cap] = false;
+            isEnabled[cap] = false;
 
-            Instance?.Disable(cap);
+            GpuContext?.Disable(cap);
             CheckForError();
         }
 
-        public static void Disable(EnableCap cap)
+        public void Disable(EnableCap cap)
         {
             Disable((int)cap);
         }
 
-        public static void DisableClientState(ArrayCap array)
+        public void DisableClientState(ArrayCap array)
         {
-            Instance?.DisableClientState(array);
+            GpuContext?.DisableClientState(array);
             CheckForError();
         }
 
-        public static void DrawArrays(BeginMode mode, int first, int count)
+        public void DrawArrays(BeginMode mode, int first, int count)
         {
-            Instance?.DrawArrays(mode, first, count);
+            GpuContext?.DrawArrays(mode, first, count);
             CheckForError();
         }
 
-        public static void DrawRangeElements(BeginMode mode, int start, int end, int count, DrawElementsType type, IntPtr indices)
+        public void DrawRangeElements(BeginMode mode, int start, int end, int count, DrawElementsType type, IntPtr indices)
         {
-            Instance?.DrawRangeElements(mode, start, end, count, type, indices);
+            GpuContext?.DrawRangeElements(mode, start, end, count, type, indices);
             CheckForError();
         }
 
-        public static void Enable(int cap)
+        public void Enable(int cap)
         {
-            IsEnabled[cap] = true;
-            Instance?.Enable(cap);
+            isEnabled[cap] = true;
+            GpuContext?.Enable(cap);
             CheckForError();
         }
 
-        public static void Enable(EnableCap cap)
+        public void Enable(EnableCap cap)
         {
             Enable((int)cap);
         }
 
-        public static void EnableClientState(ArrayCap arrayCap)
+        public void EnableClientState(ArrayCap arrayCap)
         {
-            Instance?.EnableClientState(arrayCap);
+            GpuContext?.EnableClientState(arrayCap);
             CheckForError();
         }
 
-        public static bool EnableState(int cap)
+        public bool EnableState(int cap)
         {
-            if (IsEnabled.ContainsKey(cap))
+            if (isEnabled.ContainsKey(cap))
             {
-                return IsEnabled[cap];
+                return isEnabled[cap];
             }
 
             return false;
         }
 
-        public static bool EnableState(EnableCap cap)
+        public bool EnableState(EnableCap cap)
         {
             return EnableState((int)cap);
         }
 
-        public static void End()
+        public void End()
         {
-            Instance?.End();
+            GpuContext?.End();
             inBegin = false;
 
             CheckForError();
         }
 
-        public static void GenTextures(int v, out int tex)
+        public void GenTextures(int v, out int tex)
         {
             tex = 0;
-            Instance?.GenTextures(v, out tex);
+            GpuContext?.GenTextures(v, out tex);
         }
 
-        public static void TexParameteri(int target, int pname, int param)
+        public void TexParameteri(int target, int pname, int param)
         {
-            Instance?.TexParameteri(target, pname, param);
+            GpuContext?.TexParameteri(target, pname, param);
         }
 
-        public static void Finish()
+        public void Finish()
         {
-            Instance?.Finish();
+            GpuContext?.Finish();
             CheckForError();
         }
 
-        public static void FrontFace(FrontFaceDirection mode)
+        public void FrontFace(FrontFaceDirection mode)
         {
-            Instance?.FrontFace(mode);
+            GpuContext?.FrontFace(mode);
             CheckForError();
         }
 
-        public static int GenBuffer()
+        public int GenBuffer()
         {
-            if (Instance != null)
+            if (GpuContext != null)
             {
-                var buffer = Instance.GenBuffer();
+                var buffer = GpuContext.GenBuffer();
                 CheckForError();
                 return buffer;
             }
@@ -403,54 +385,54 @@ namespace MatterHackers.RenderGl.OpenGl
             return 0;
         }
 
-        public static int GenTexture()
+        public int GenTexture()
         {
-            var texture = Instance?.GenTexture();
+            var texture = GpuContext?.GenTexture();
             CheckForError();
             return texture.Value;
         }
 
-        public static ErrorCode GetError()
+        public ErrorCode GetError()
         {
-            if (Instance != null)
+            if (GpuContext != null)
             {
-                return Instance.GetError();
+                return GpuContext.GetError();
             }
 
             return ErrorCode.NoError;
         }
 
-        public static void GenFramebuffers(int n, out int framebuffers)
+        public void GenFramebuffers(int n, out int framebuffers)
         {
             framebuffers = 0;
-            Instance?.GenFramebuffers(n, out framebuffers);
+            GpuContext?.GenFramebuffers(n, out framebuffers);
             CheckForError();
         }
 
-        public static void FramebufferTexture2D(int target, int attachment, int textarget, int texture, int level)
+        public void FramebufferTexture2D(int target, int attachment, int textarget, int texture, int level)
         {
-            Instance?.FramebufferTexture2D(target, attachment, textarget, texture, level);
+            GpuContext?.FramebufferTexture2D(target, attachment, textarget, texture, level);
             CheckForError();
         }
 
-        public static string GetString(StringName name)
+        public string GetString(StringName name)
         {
-            if (Instance != null)
+            if (GpuContext != null)
             {
                 CheckForError();
-                return Instance.GetString(name);
+                return GpuContext.GetString(name);
             }
 
             return "";
         }
 
-        public static void IndexPointer(IndexPointerType type, int stride, IntPtr pointer)
+        public void IndexPointer(IndexPointerType type, int stride, IntPtr pointer)
         {
-            Instance?.IndexPointer(type, stride, pointer);
+            GpuContext?.IndexPointer(type, stride, pointer);
             CheckForError();
         }
 
-        public static void BufferData(int target, float[] v, int usage)
+        public void BufferData(int target, float[] v, int usage)
         {
             unsafe
             {
@@ -461,7 +443,7 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static void BufferData(int target, PositionNormal[] v, int usage)
+        public void BufferData(int target, PositionNormal[] v, int usage)
         {
             unsafe
             {
@@ -472,13 +454,13 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static void UniformMatrix4fv(int location, int count, int transpose, float[] value)
+        public void UniformMatrix4fv(int location, int count, int transpose, float[] value)
         {
-            Instance?.UniformMatrix4fv(location, count, transpose, value);
+            GpuContext?.UniformMatrix4fv(location, count, transpose, value);
             CheckForError();
         }
 
-        public static void BufferData(int target, int[] faceIndex, int usage)
+        public void BufferData(int target, int[] faceIndex, int usage)
         {
             unsafe
             {
@@ -489,93 +471,93 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static void GenVertexArrays(int v, out int vAO)
+        public void GenVertexArrays(int v, out int vAO)
         {
             vAO = 0;
-            Instance?.GenVertexArrays(v, out vAO);
+            GpuContext?.GenVertexArrays(v, out vAO);
             CheckForError();
         }
 
-        public static void VertexAttribPointer(int index, int size, int type, int normalized, int stride, IntPtr pointer)
+        public void VertexAttribPointer(int index, int size, int type, int normalized, int stride, IntPtr pointer)
         {
-            Instance?.VertexAttribPointer(index, size, type, normalized, stride, pointer);
+            GpuContext?.VertexAttribPointer(index, size, type, normalized, stride, pointer);
             CheckForError();
         }
 
-        public static void EnableVertexAttribArray(int index)
+        public void EnableVertexAttribArray(int index)
         {
-            Instance?.EnableVertexAttribArray(index);
+            GpuContext?.EnableVertexAttribArray(index);
             CheckForError();
         }
 
-        public static void Light(LightName light, LightParameter pname, float[] param)
+        public void Light(LightName light, LightParameter pname, float[] param)
         {
-            Instance?.Light(light, pname, param);
+            GpuContext?.Light(light, pname, param);
             CheckForError();
         }
 
-        public static void GenBuffers(int n, out int buffer)
+        public void GenBuffers(int n, out int buffer)
         {
             buffer = 0;
-            Instance?.GenBuffers(n, out buffer);
+            GpuContext?.GenBuffers(n, out buffer);
             CheckForError();
         }
 
-        public static void print_shader_info_log(int shader)
+        public void print_shader_info_log(int shader)
         {
-            var shaderInfo = Instance?.GetShaderInfoLog(shader);
+            var shaderInfo = GpuContext?.GetShaderInfoLog(shader);
             if (!string.IsNullOrEmpty(shaderInfo))
             {
                 Debug.WriteLine(shaderInfo);
             }
         }
 
-        public static int load_shader(string src, int shaderType)
+        public int load_shader(string src, int shaderType)
         {
             if (string.IsNullOrEmpty(src))
             {
                 return 0;
             }
 
-            int s = GL.CreateShader(shaderType);
+            int s = CreateShader(shaderType);
             if (s == 0)
             {
                 Debug.WriteLine("Error: load_shader() failed to create shader.\n");
                 return 0;
             }
             // Pass shader source string
-            GL.ShaderSource(s, 1, src, null);
-            GL.CompileShader(s);
+            ShaderSource(s, 1, src, null);
+            CompileShader(s);
             // Print info log (if any)
             print_shader_info_log(s);
             return s;
         }
 
-        private static void CompileShader(int id)
+        private void CompileShader(int id)
         {
-            Instance?.CompileShader(id);
+            GpuContext?.CompileShader(id);
             CheckForError();
         }
 
-        private static void ShaderSource(int id, int count, string src, object p)
+        private void ShaderSource(int id, int count, string src, object p)
         {
-            Instance?.ShaderSource(id, count, src, p);
+            GpuContext?.ShaderSource(id, count, src, p);
             CheckForError();
         }
 
-        public static int CreateShader(int shaderType)
+        public int CreateShader(int shaderType)
         {
-            var id = Instance?.CreateShader(shaderType);
+            var id = GpuContext?.CreateShader(shaderType);
             CheckForError();
             return id == null ? 0 : id.Value;
         }
 
-        public static bool create_shader_program(string geom_source,
+        public bool create_shader_program(string geom_source,
             string vert_source,
             string frag_source,
             out int id)
         {
-            id = GL.CreateProgram();
+            id = CreateProgram();
             int g = 0, f = 0, v = 0;
             if (!string.IsNullOrEmpty(geom_source))
             {
@@ -586,7 +568,7 @@ namespace MatterHackers.RenderGl.OpenGl
                     Debug.WriteLine("geometry shader failed to compile.");
                     return false;
                 }
-                GL.AttachShader(id, g);
+                AttachShader(id, g);
             }
 
             if (vert_source != "")
@@ -599,7 +581,7 @@ namespace MatterHackers.RenderGl.OpenGl
                     return false;
                 }
 
-                GL.AttachShader(id, v);
+                AttachShader(id, v);
             }
 
             if (frag_source != "")
@@ -611,30 +593,18 @@ namespace MatterHackers.RenderGl.OpenGl
                     Debug.WriteLine("fragment shader failed to compile.");
                     return false;
                 }
-                GL.AttachShader(id, f);
+                AttachShader(id, f);
             }
 
-            //// loop over attributes
-            //for (
-            //  std::map < std::string, gluint >::const_iterator ait = attrib.begin();
-            //  ait != attrib.end();
-            //  ait++)
-            //{
-            //	glbindattriblocation(
-            //	  id,
-            //	  (*ait).second,
-            //	  (*ait).first.c_str());
-            //}
-
             // Link program
-            GL.LinkProgram(id);
+            LinkProgram(id);
 
             void detach(int idIn, int shader)
             {
                 if (shader != 0)
                 {
-                    GL.DetachShader(idIn, shader);
-                    GL.DeleteShader(shader);
+                    DetachShader(idIn, shader);
+                    DeleteShader(shader);
                 }
             }
 
@@ -642,102 +612,99 @@ namespace MatterHackers.RenderGl.OpenGl
             detach(id, f);
             detach(id, v);
 
-            // print log if any
-            // print_program_info_log(id);
-
             return true;
         }
 
-        private static void DeleteShader(int shader)
+        private void DeleteShader(int shader)
         {
-            Instance?.DeleteShader(shader);
+            GpuContext?.DeleteShader(shader);
         }
 
-        private static void DetachShader(int id, int shader)
+        private void DetachShader(int id, int shader)
         {
-            Instance?.DetachShader(id, shader);
+            GpuContext?.DetachShader(id, shader);
         }
 
-        private static void LinkProgram(int id)
+        private void LinkProgram(int id)
         {
-            Instance?.LinkProgram(id);
+            GpuContext?.LinkProgram(id);
         }
 
-        private static void AttachShader(int program, int shader)
+        private void AttachShader(int program, int shader)
         {
-            Instance?.AttachShader(program, shader);
+            GpuContext?.AttachShader(program, shader);
         }
 
-        private static int CreateProgram()
+        private int CreateProgram()
         {
-            var id = Instance?.CreateProgram();
+            var id = GpuContext?.CreateProgram();
             CheckForError();
             return id == null ? 0 : id.Value;
         }
 
-        public static void Uniform1f(int location, float v0)
+        public void Uniform1f(int location, float v0)
         {
-            Instance?.Uniform1f(location, v0);
+            GpuContext?.Uniform1f(location, v0);
             CheckForError();
         }
 
-        public static void LoadIdentity()
+        public void LoadIdentity()
         {
-            Instance?.LoadIdentity();
+            GpuContext?.LoadIdentity();
             CheckForError();
         }
 
-        public static void ClearColor(double r, double g, double b, double a)
+        public void ClearColor(double r, double g, double b, double a)
         {
-            Instance?.ClearColor(r, g, b, a);
+            GpuContext?.ClearColor(r, g, b, a);
             CheckForError();
         }
 
-        public static int GenFramebuffer()
+        public int GenFramebuffer()
         {
-            var texture = Instance?.GenFramebuffer();
+            var texture = GpuContext?.GenFramebuffer();
             CheckForError();
             return texture.Value;
         }
 
-        public static void LoadMatrix(double[] m)
+        public void LoadMatrix(double[] m)
         {
-            Instance?.LoadMatrix(m);
+            GpuContext?.LoadMatrix(m);
             CheckForError();
         }
 
-        public static void DrawElements(int mode, int count, int elementType, IntPtr indices)
+        public void DrawElements(int mode, int count, int elementType, IntPtr indices)
         {
-            Instance?.DrawElements(mode, count, elementType, indices);
+            GpuContext?.DrawElements(mode, count, elementType, indices);
             CheckForError();
         }
 
-        public static void MatrixMode(MatrixMode mode)
+        public void MatrixMode(MatrixMode mode)
         {
             matrixMode = mode;
-            Instance?.MatrixMode(mode);
+            GpuContext?.MatrixMode(mode);
             CheckForError();
         }
 
-        public static void MultMatrix(float[] m)
+        public void MultMatrix(float[] m)
         {
-            Instance?.MultMatrix(m);
+            GpuContext?.MultMatrix(m);
             CheckForError();
         }
 
-        public static void ActiveTexture(int texture)
+        public void ActiveTexture(int texture)
         {
-            Instance?.ActiveTexture(texture);
+            GpuContext?.ActiveTexture(texture);
             CheckForError();
         }
 
-        public static void Normal3(double x, double y, double z)
+        public void Normal3(double x, double y, double z)
         {
-            Instance?.Normal3(x, y, z);
+            GpuContext?.Normal3(x, y, z);
             CheckForError();
         }
 
-        public static void NormalPointer(NormalPointerType type, int stride, float[] pointer)
+        public void NormalPointer(NormalPointerType type, int stride, float[] pointer)
         {
             unsafe
             {
@@ -748,32 +715,32 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static void NormalPointer(NormalPointerType type, int stride, IntPtr pointer)
+        public void NormalPointer(NormalPointerType type, int stride, IntPtr pointer)
         {
-            Instance?.NormalPointer(type, stride, pointer);
+            GpuContext?.NormalPointer(type, stride, pointer);
             CheckForError();
         }
 
-        public static void Ortho(double left, double right, double bottom, double top, double zNear, double zFar)
+        public void Ortho(double left, double right, double bottom, double top, double zNear, double zFar)
         {
-            Instance?.Ortho(left, right, bottom, top, zNear, zFar);
+            GpuContext?.Ortho(left, right, bottom, top, zNear, zFar);
             CheckForError();
         }
 
-        public static void PolygonOffset(float factor, float units)
+        public void PolygonOffset(float factor, float units)
         {
-            Instance?.PolygonOffset(factor, units);
+            GpuContext?.PolygonOffset(factor, units);
             CheckForError();
         }
 
-        public static void PopAttrib()
+        public void PopAttrib()
         {
             pushAttribCount--;
-            Instance?.PopAttrib();
+            GpuContext?.PopAttrib();
             CheckForError();
         }
 
-        public static void PopMatrix()
+        public void PopMatrix()
         {
             pushMatrixCount[matrixMode]--;
             if (pushMatrixCount[matrixMode] < 0)
@@ -781,11 +748,11 @@ namespace MatterHackers.RenderGl.OpenGl
                 throw new Exception("popMatrib called too many times.");
             }
 
-            Instance?.PopMatrix();
+            GpuContext?.PopMatrix();
             CheckForError();
         }
 
-        public static void PushAttrib(AttribMask mask)
+        public void PushAttrib(AttribMask mask)
         {
             pushAttribCount++;
             if (pushAttribCount > 100)
@@ -793,17 +760,17 @@ namespace MatterHackers.RenderGl.OpenGl
                 throw new Exception("pushAttrib being called without matching PopAttrib");
             }
 
-            Instance?.PushAttrib(mask);
+            GpuContext?.PushAttrib(mask);
             CheckForError();
         }
 
-        public static void Uniform1i(int location, int v0)
+        public void Uniform1i(int location, int v0)
         {
-            Instance?.Uniform1i(location, v0);
+            GpuContext?.Uniform1i(location, v0);
             CheckForError();
         }
 
-        public static void PushMatrix()
+        public void PushMatrix()
         {
             pushMatrixCount[matrixMode]++;
             if (pushMatrixCount[matrixMode] > 32)
@@ -811,76 +778,76 @@ namespace MatterHackers.RenderGl.OpenGl
                 throw new Exception("PushMatrix being called without matching PopMatrix");
             }
 
-            Instance?.PushMatrix();
+            GpuContext?.PushMatrix();
             CheckForError();
         }
 
-        public static int GetUniformLocation(int program, string name)
+        public int GetUniformLocation(int program, string name)
         {
-            var value = Instance?.GetUniformLocation(program, name);
+            var value = GpuContext?.GetUniformLocation(program, name);
             CheckForError();
             return value == null ? 0 : value.Value;
         }
 
-        public static void UseProgram(int program)
+        public void UseProgram(int program)
         {
-            Instance?.UseProgram(program);
+            GpuContext?.UseProgram(program);
             CheckForError();
         }
 
-        public static void Rotate(double angle, double x, double y, double z)
+        public void Rotate(double angle, double x, double y, double z)
         {
-            Instance?.Rotate(angle, x, y, z);
+            GpuContext?.Rotate(angle, x, y, z);
             CheckForError();
         }
 
-        public static void Scale(double x, double y, double z)
+        public void Scale(double x, double y, double z)
         {
-            Instance?.Scale(x, y, z);
+            GpuContext?.Scale(x, y, z);
             CheckForError();
         }
 
-        public static void Scissor(int x, int y, int width, int height)
+        public void Scissor(int x, int y, int width, int height)
         {
-            Instance?.Scissor(x, y, width, height);
+            GpuContext?.Scissor(x, y, width, height);
             CheckForError();
         }
 
-        public static void ShadeModel(ShadingModel model)
+        public void ShadeModel(ShadingModel model)
         {
-            Instance?.ShadeModel(model);
+            GpuContext?.ShadeModel(model);
             CheckForError();
         }
 
-        public static void TexCoord2(Vector2 uv)
+        public void TexCoord2(Vector2 uv)
         {
             TexCoord2(uv.X, uv.Y);
         }
 
-        public static void TexCoord2(Vector2Float uv)
+        public void TexCoord2(Vector2Float uv)
         {
             TexCoord2(uv.X, uv.Y);
         }
 
-        public static void TexCoord2(double x, double y)
+        public void TexCoord2(double x, double y)
         {
-            Instance?.TexCoord2(x, y);
+            GpuContext?.TexCoord2(x, y);
             CheckForError();
         }
 
-        public static void TexCoordPointer(int size, TexCordPointerType type, int stride, IntPtr pointer)
+        public void TexCoordPointer(int size, TexCordPointerType type, int stride, IntPtr pointer)
         {
-            Instance?.TexCoordPointer(size, type, stride, pointer);
+            GpuContext?.TexCoordPointer(size, type, stride, pointer);
             CheckForError();
         }
 
-        public static void TexEnv(TextureEnvironmentTarget target, TextureEnvParameter pname, float param)
+        public void TexEnv(TextureEnvironmentTarget target, TextureEnvParameter pname, float param)
         {
-            Instance?.TexEnv(target, pname, param);
+            GpuContext?.TexEnv(target, pname, param);
             CheckForError();
         }
 
-        public static void TexImage2D(int target,
+        public void TexImage2D(int target,
             int level,
             int internalFormat,
             int width,
@@ -890,7 +857,7 @@ namespace MatterHackers.RenderGl.OpenGl
             int type,
             byte[] pixels)
         {
-            Instance?.TexImage2D(target,
+            GpuContext?.TexImage2D(target,
                 level,
                 internalFormat,
                 width,
@@ -902,7 +869,7 @@ namespace MatterHackers.RenderGl.OpenGl
             CheckForError();
         }
 
-        public static void TexImage2D(TextureTarget target,
+        public void TexImage2D(TextureTarget target,
             int level,
             PixelInternalFormat internalFormat,
             int width,
@@ -915,51 +882,51 @@ namespace MatterHackers.RenderGl.OpenGl
             TexImage2D((int)target, level, (int)internalFormat, width, height, border, (int)format, (int)type, pixels);
         }
 
-        public static void TexParameter(TextureTarget target, TextureParameterName pname, int param)
+        public void TexParameter(TextureTarget target, TextureParameterName pname, int param)
         {
-            Instance?.TexParameter(target, pname, param);
+            GpuContext?.TexParameter(target, pname, param);
             CheckForError();
         }
 
-        public static void Translate(MatterHackers.VectorMath.Vector3 vector)
+        public void Translate(MatterHackers.VectorMath.Vector3 vector)
         {
             Translate(vector.X, vector.Y, vector.Z);
         }
 
-        public static void Translate(double x, double y, double z)
+        public void Translate(double x, double y, double z)
         {
-            Instance?.Translate(x, y, z);
+            GpuContext?.Translate(x, y, z);
             CheckForError();
         }
 
-        public static void Vertex2(Vector2 position)
+        public void Vertex2(Vector2 position)
         {
             Vertex2(position.X, position.Y);
         }
 
-        public static void Vertex2(double x, double y)
+        public void Vertex2(double x, double y)
         {
-            Instance?.Vertex2(x, y);
+            GpuContext?.Vertex2(x, y);
             CheckForError();
         }
 
-        public static void Vertex3(Vector3 position)
+        public void Vertex3(Vector3 position)
         {
             Vertex3(position.X, position.Y, position.Z);
         }
 
-        public static void Vertex3(Vector3Float position)
+        public void Vertex3(Vector3Float position)
         {
             Vertex3(position.X, position.Y, position.Z);
         }
 
-        public static void Vertex3(double x, double y, double z)
+        public void Vertex3(double x, double y, double z)
         {
-            Instance?.Vertex3(x, y, z);
+            GpuContext?.Vertex3(x, y, z);
             CheckForError();
         }
 
-        public static void VertexPointer(int size, VertexPointerType type, int stride, float[] pointer)
+        public void VertexPointer(int size, VertexPointerType type, int stride, float[] pointer)
         {
             unsafe
             {
@@ -970,19 +937,19 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static void VertexPointer(int size, VertexPointerType type, int stride, IntPtr pointer)
+        public void VertexPointer(int size, VertexPointerType type, int stride, IntPtr pointer)
         {
-            Instance?.VertexPointer(size, type, stride, pointer);
+            GpuContext?.VertexPointer(size, type, stride, pointer);
             CheckForError();
         }
 
-        public static void Viewport(int x, int y, int width, int height)
+        public void Viewport(int x, int y, int width, int height)
         {
-            Instance?.Viewport(x, y, width, height);
+            GpuContext?.Viewport(x, y, width, height);
             CheckForError();
         }
 
-        public static void EnableOrDisable(EnableCap depthTest, bool doDepthTest)
+        public void EnableOrDisable(EnableCap depthTest, bool doDepthTest)
         {
             if (doDepthTest)
             {
@@ -994,34 +961,34 @@ namespace MatterHackers.RenderGl.OpenGl
             }
         }
 
-        public static int GenLists(int v)
+        public int GenLists(int v)
         {
-            var result = Instance?.GenLists(v);
+            var result = GpuContext?.GenLists(v);
             CheckForError();
             return result ?? 0;
         }
 
-        public static void NewList(int displayListId, object compile)
+        public void NewList(int displayListId, object compile)
         {
-            Instance?.NewList(displayListId, compile);
+            GpuContext?.NewList(displayListId, compile);
             CheckForError();
         }
 
-        public static void EndList()
+        public void EndList()
         {
-            Instance?.EndList();
+            GpuContext?.EndList();
             CheckForError();
         }
 
-        public static void CallList(int displayListId)
+        public void CallList(int displayListId)
         {
-            Instance?.CallList(displayListId);
+            GpuContext?.CallList(displayListId);
             CheckForError();
         }
 
-        public static void DeleteLists(int id, int v)
+        public void DeleteLists(int id, int v)
         {
-            Instance?.DeleteLists(id, v);
+            GpuContext?.DeleteLists(id, v);
             CheckForError();
         }
     }

@@ -1370,7 +1370,7 @@ namespace MatterHackers.RenderGl
 				context.RSSetState(rasterizerState);
 			}
 
-			var glMeshPlugin = MeshTrianglePlugin.Get(command.Mesh);
+			var glMeshPlugin = MeshTrianglePlugin.Get(OwnerGl, command.Mesh);
 			for (int subMeshIndex = 0; subMeshIndex < glMeshPlugin.subMeshs.Count; subMeshIndex++)
 			{
 				var subMesh = glMeshPlugin.subMeshs[subMeshIndex];
@@ -1521,8 +1521,8 @@ namespace MatterHackers.RenderGl
 				context.RSSetState(rasterizerState);
 			}
 
-			var glMeshPlugin = MeshTrianglePlugin.Get(command.Mesh);
-			var sceneShaderData = SceneEdgeShaderDataPlugin.Get(command.Mesh, command.RenderType);
+			var glMeshPlugin = MeshTrianglePlugin.Get(OwnerGl, command.Mesh);
+			var sceneShaderData = SceneEdgeShaderDataPlugin.Get(OwnerGl, command.Mesh, command.RenderType);
 			for (int subMeshIndex = 0; subMeshIndex < glMeshPlugin.subMeshs.Count; subMeshIndex++)
 			{
 				var subMesh = glMeshPlugin.subMeshs[subMeshIndex];
@@ -1543,7 +1543,7 @@ namespace MatterHackers.RenderGl
 				var textureView = forcedTextureView ?? whiteTextureView;
 				if (forcedTextureView == null && subMesh.texture != null)
 				{
-					var texturePlugin = ImageTexturePlugin.GetImageTexturePlugin(subMesh.texture, true);
+					var texturePlugin = ImageTexturePlugin.GetImageTexturePlugin(OwnerGl, subMesh.texture, true);
 					if (texturePlugin != null
 						&& textures.TryGetValue(texturePlugin.GLTextureHandle, out var textureInfo)
 						&& textureInfo.ShaderResourceView != null)
