@@ -267,7 +267,7 @@ namespace MatterHackers.Agg
 							// spanImageFilter = new span_image_filter_rgba_bilinear_clip(sourceAccessor, RGBA_Floats.rgba_pre(0, 0, 0, 0), interpolator);
 
 							IImageFilterFunction filterFunction = null;
-							filterFunction = new image_filter_blackman(4);
+							filterFunction = new image_filter_spline16();
 							var filter = new ImageFilterLookUpTable();
 							filter.calculate(filterFunction, true);
 
