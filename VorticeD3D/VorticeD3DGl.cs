@@ -1019,10 +1019,10 @@ namespace MatterHackers.RenderGl
 			immediateData.Positions.Add((float)y);
 			immediateData.Positions.Add(0f);
 
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[0]);
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[1]);
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[2]);
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[3]);
+			immediateData.Colors.Add(immediateData.CurrentColor[0]);
+			immediateData.Colors.Add(immediateData.CurrentColor[1]);
+			immediateData.Colors.Add(immediateData.CurrentColor[2]);
+			immediateData.Colors.Add(immediateData.CurrentColor[3]);
 		}
 
 		public void Vertex3(double x, double y, double z)
@@ -1031,18 +1031,18 @@ namespace MatterHackers.RenderGl
 			immediateData.Positions.Add((float)y);
 			immediateData.Positions.Add((float)z);
 
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[0]);
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[1]);
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[2]);
-			immediateData.Colors.Add(ImmediateModeData.CurrentColor[3]);
+			immediateData.Colors.Add(immediateData.CurrentColor[0]);
+			immediateData.Colors.Add(immediateData.CurrentColor[1]);
+			immediateData.Colors.Add(immediateData.CurrentColor[2]);
+			immediateData.Colors.Add(immediateData.CurrentColor[3]);
 		}
 
 		public void Color4(byte red, byte green, byte blue, byte alpha)
 		{
-			ImmediateModeData.CurrentColor[0] = red;
-			ImmediateModeData.CurrentColor[1] = green;
-			ImmediateModeData.CurrentColor[2] = blue;
-			ImmediateModeData.CurrentColor[3] = alpha;
+			immediateData.CurrentColor[0] = red;
+			immediateData.CurrentColor[1] = green;
+			immediateData.CurrentColor[2] = blue;
+			immediateData.CurrentColor[3] = alpha;
 		}
 
 		public void TexCoord2(double x, double y)
@@ -1114,10 +1114,10 @@ namespace MatterHackers.RenderGl
 			}
 			else
 			{
-				r = ImmediateModeData.CurrentColor[0] / 255f;
-				g = ImmediateModeData.CurrentColor[1] / 255f;
-				b = ImmediateModeData.CurrentColor[2] / 255f;
-				a = ImmediateModeData.CurrentColor[3] / 255f;
+				r = immediateData.CurrentColor[0] / 255f;
+				g = immediateData.CurrentColor[1] / 255f;
+				b = immediateData.CurrentColor[2] / 255f;
+				a = immediateData.CurrentColor[3] / 255f;
 			}
 		}
 
@@ -2959,7 +2959,7 @@ namespace MatterHackers.RenderGl
 
 		private class ImmediateModeData
 		{
-			public static byte[] CurrentColor = new byte[] { 255, 255, 255, 255 };
+			public byte[] CurrentColor = new byte[] { 255, 255, 255, 255 };
 			public BeginMode Mode;
 			public List<float> Positions = new List<float>();
 			public List<byte> Colors = new List<byte>();
