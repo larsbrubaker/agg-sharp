@@ -4,8 +4,10 @@
 // See the LICENSE.md file in the project root for more information.
 
 using System;
+using System.Linq;
 using Markdig.Agg;
 using Markdig.Extensions.Tables;
+using Markdig.Syntax.Inlines;
 using MatterHackers.Agg;
 using MatterHackers.Agg.UI;
 
@@ -24,6 +26,7 @@ namespace Markdig.Renderers.Agg
 			var aggTable = new AggTable(mdTable)
 			{
 				Margin = new BorderDouble(top: 12),
+				HasImages = TableContainsImages(mdTable),
 			};
 
 			renderer.Push(aggTable);
@@ -123,6 +126,40 @@ namespace Markdig.Renderers.Agg
 			{
 				HAnchor = HAnchor.Left
 			};
+		}
+
+		/// <summary>
+		/// Checks the markdig AST for image links in any cell of the table.
+		/// </summary>
+		private static bool TableContainsImages(Table mdTable)
+		{
+			foreach (var block in mdTable)
+			{
+				if (block is TableRow row)
+				{
+					foreach (var cellBlock in row)
+					{
+						if (cellBlock is TableCell cell)
+						{
+							foreach (var paragraph in cell)
+							{
+								if (paragraph is Markdig.Syntax.LeafBlock leaf && leaf.Inline != null)
+								{
+									foreach (var inline in leaf.Inline)
+									{
+										if (inline is LinkInline link && link.IsImage)
+										{
+											return true;
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			return false;
 		}
 	}
 }

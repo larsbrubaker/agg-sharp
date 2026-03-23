@@ -19,6 +19,14 @@ namespace Markdig.Renderers.Agg
 
 		public List<AggTableCell> Cells { get; } = new List<AggTableCell>();
 
+		/// <summary>
+		/// The current width applied to this column's cells.
+		/// </summary>
+		public double CellWidth { get; private set; }
+
+		/// <summary>
+		/// Size all cells to fit the widest content.
+		/// </summary>
 		public void SetCellWidths()
 		{
 			double cellPadding = 10;
@@ -29,12 +37,21 @@ namespace Markdig.Renderers.Agg
 			}
 
 			double maxCellWidth = this.Cells.Select(c => c.ContentWidth).Max() + cellPadding * 2;
+			SetCellWidths(maxCellWidth);
+		}
+
+		/// <summary>
+		/// Set all cells to the specified width.
+		/// </summary>
+		public void SetCellWidths(double width)
+		{
+			CellWidth = width;
 
 			foreach (var cell in this.Cells)
 			{
-				if (cell.Width != maxCellWidth)
+				if (cell.Width != width)
 				{
-					cell.Width = maxCellWidth;
+					cell.Width = width;
 				}
 			}
 		}

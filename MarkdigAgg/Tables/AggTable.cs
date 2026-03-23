@@ -12,12 +12,19 @@ namespace Markdig.Renderers.Agg
 {
 	public class AggTable : FlowLayoutWidget
 	{
+		private bool inLayout;
 
 		public List<AggTableColumn> Columns { get; }
 
 		public List<AggTableRow> Rows { get; }
 
 		public List<HorizontalLine> HorizontalRules { get; } = new List<HorizontalLine>();
+
+		/// <summary>
+		/// Set to true when any cell in this table contains an image.
+		/// When true, all columns use equal widths so images render at the same size.
+		/// </summary>
+		public bool HasImages { get; set; }
 
 		public AggTable(Table table) : base(FlowDirection.TopToBottom)
 		{
@@ -28,31 +35,55 @@ namespace Markdig.Renderers.Agg
 
 		public override void OnLayout(LayoutEventArgs layoutEventArgs)
 		{
-			base.OnLayout(layoutEventArgs);
-
-			if (this.Columns?.Count > 0)
+			if (inLayout)
 			{
-				foreach (var column in this.Columns)
+				return;
+			}
+
+			inLayout = true;
+			try
+			{
+				base.OnLayout(layoutEventArgs);
+
+				if (this.Columns?.Count > 0)
 				{
-					column.SetCellWidths();
+					foreach (var column in this.Columns)
+					{
+						column.SetCellWidths();
+					}
+
+					// When any cell contains images, all columns use the same width
+					// so images render at equal size — matching GitHub/VS Code table behavior.
+					if (HasImages)
+					{
+						double maxColumnWidth = this.Columns.Max(c => c.CellWidth);
+						foreach (var column in this.Columns)
+						{
+							column.SetCellWidths(maxColumnWidth);
+						}
+					}
 				}
+
+				var rowWidth = (this.Rows ?? new List<AggTableRow>())
+					.Where(row => row.Cells.Count > 0)
+					.Select(row => row.Cells.Sum(cell => cell.Width))
+					.DefaultIfEmpty(0)
+					.Max();
+
+				foreach (var rule in this.HorizontalRules)
+				{
+					rule.HAnchor = HAnchor.Left;
+					rule.Margin = new BorderDouble(left: 9);
+					rule.Width = rowWidth + 2;
+				}
+
+				// Re-run layout after columns have real measured widths.
+				base.OnLayout(layoutEventArgs);
 			}
-
-			var rowWidth = (this.Rows ?? new List<AggTableRow>())
-				.Where(row => row.Cells.Count > 0)
-				.Select(row => row.Cells.Sum(cell => cell.Width))
-				.DefaultIfEmpty(0)
-				.Max();
-
-			foreach (var rule in this.HorizontalRules)
+			finally
 			{
-				rule.HAnchor = HAnchor.Left;
-				rule.Margin = new BorderDouble(left: 9);
-				rule.Width = rowWidth + 2;
+				inLayout = false;
 			}
-
-			// Re-run layout after columns have real measured widths.
-			base.OnLayout(layoutEventArgs);
 		}
 	}
 }
