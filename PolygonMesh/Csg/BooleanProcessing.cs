@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright (c) 2019, Lars Brubaker, John Lewin
 All rights reserved.
 
@@ -97,170 +97,21 @@ namespace MatterHackers.PolygonMesh.Csg
 
 				if (allManifold)
 				{
-					bool trackColors = meshColors != null;
-
-					var manifolds = new List<ManifoldNET.Manifold>();
-					var originalIdToColor = new Dictionary<int, Color>();
-					// Spatial face color data keyed by OriginalID, used when a mesh has FaceColors
-					// but can't be split into manifold sub-meshes per color group.
-					// Stores (centroid, color) pairs for spatial proximity matching after boolean.
-					var originalIdToSpatialColors = new Dictionary<int, List<(Vector3, Color)>>();
-					int meshIndex = 0;
-					foreach (var (mesh, matrix) in items)
+					try
 					{
-						if (mesh.Vertices.Count == 0 || mesh.Faces.Count == 0)
-						{
-							// Intersect with any empty operand produces empty result
-							if (operation == CsgModes.Intersect)
-							{
-								return new Mesh();
-							}
-
-							// Subtract with empty first operand produces empty result
-							if (meshIndex == 0 && operation == CsgModes.Subtract)
-							{
-								return new Mesh();
-							}
-
-							// Skip empty meshes for union (A ∪ ∅ = A) and subtract (A - ∅ = A)
-							meshIndex++;
-							continue;
-						}
-
-						var meshCopy = mesh.Copy(CancellationToken.None);
-						meshCopy.Transform(matrix);
-
-						ManifoldNET.Manifold manifold = null;
-
-						// Try to split by face colors if the mesh already has per-face colors
-						// (e.g., from a previous boolean or CopyAllFaces merge).
-						// This only works when each color group is individually manifold.
-						if (trackColors && meshCopy.FaceColors != null)
-						{
-							manifold = TrySplitByFaceColors(meshCopy, originalIdToColor);
-						}
-
-						// If no face colors, or splitting failed, create a single manifold
-						if (manifold == null)
-						{
-							var vertProperties = new List<float>();
-							var triVerts = new List<uint>();
-
-							foreach (var vertex in meshCopy.Vertices)
-							{
-								vertProperties.Add(vertex.X);
-								vertProperties.Add(vertex.Y);
-								vertProperties.Add(vertex.Z);
-							}
-
-							foreach (var face in meshCopy.Faces)
-							{
-								triVerts.Add((uint)face.v0);
-								triVerts.Add((uint)face.v1);
-								triVerts.Add((uint)face.v2);
-							}
-
-							var meshGlData = new ManifoldNET.MeshGLData(vertProperties.ToArray(), triVerts.ToArray(), 3);
-							var meshGl = new ManifoldNET.MeshGL(meshGlData);
-							manifold = ManifoldNET.Manifold.Create(meshGl);
-
-							if (trackColors)
-							{
-								manifold = manifold.AsOriginal();
-								if (meshCopy.FaceColors != null)
-								{
-									originalIdToSpatialColors[manifold.OriginalID] = meshCopy.SaveFaceCentroidColors();
-								}
-								else
-								{
-									var color = (meshColors != null && meshIndex < meshColors.Length)
-										? meshColors[meshIndex]
-										: new Color(200, 200, 200, 255);
-									originalIdToColor[manifold.OriginalID] = color;
-								}
-							}
-						}
-
-						manifolds.Add(manifold);
-						meshIndex++;
+						return DoArrayViaManifold(items, operation, cancellationToken, reporter, amountPerOperation, ratioCompleted, meshColors);
 					}
-
-					// Convert operation type
-					var opperationType = ManifoldNET.BoolOperationType.Add;
-
-					if (operation == CsgModes.Subtract)
+					catch
 					{
-						opperationType = ManifoldNET.BoolOperationType.Subtract;
+						// Manifold native library failed — fall back to managed CsgBySlicing
+						var csgBySlicing = new CsgBySlicing();
+						csgBySlicing.Setup(items, null, operation, cancellationToken);
+						return csgBySlicing.Calculate((ratio, message) =>
+						{
+							reporter?.Invoke(ratio * amountPerOperation + ratioCompleted, message);
+						},
+						cancellationToken);
 					}
-					else if (operation == CsgModes.Intersect)
-					{
-						opperationType = ManifoldNET.BoolOperationType.Intersect;
-					}
-
-					ManifoldNET.Manifold boolResult = null;
-					if (manifolds.Count == 1)
-					{
-						boolResult = manifolds[0];
-					}
-					else if (manifolds.Count >= 2)
-					{
-						try
-						{
-							boolResult = ManifoldNET.Manifold.BatchBoolOperation(manifolds, opperationType);
-						}
-						catch
-						{
-                            var csgBySlicing = new CsgBySlicing();
-                            csgBySlicing.Setup(items, null, operation, cancellationToken);
-                            return csgBySlicing.Calculate((ratio, message) =>
-                            {
-                                reporter?.Invoke(ratio * amountPerOperation + ratioCompleted, message);
-                            },
-                            cancellationToken);
-                        }
-                    }
-
-					// Convert result back to Mesh format
-					var resultMesh = new Mesh();
-
-					if (boolResult != null)
-					{
-						var result = boolResult.MeshGL;
-						var resultNumProp = result.PropertiesNumber;
-						var vertices = result.VerticesProperties;
-						var indices = result.TriangleVertices;
-
-						// Build vertices and faces
-						for (int i = 0; i < vertices.Length; i += resultNumProp)
-						{
-							resultMesh.Vertices.Add(new Vector3(
-								vertices[i],
-								vertices[i + 1],
-								vertices[i + 2]));
-						}
-
-						for (int i = 0; i < indices.Length; i += 3)
-						{
-							resultMesh.Faces.Add(new Face(
-								indices[i],
-								indices[i + 1],
-								indices[i + 2],
-								resultMesh.Vertices));
-						}
-
-						// Extract per-face colors from run data
-						if (trackColors && resultMesh.Faces.Count > 0)
-						{
-							var faceColors = ManifoldRunHelper.ExtractFaceColors(
-								result, resultMesh, originalIdToColor, originalIdToSpatialColors);
-							if (faceColors != null)
-							{
-								resultMesh.FaceColors = faceColors;
-							}
-						}
-					}
-
-					return resultMesh;
                 }
                 else
 				{
@@ -277,6 +128,159 @@ namespace MatterHackers.PolygonMesh.Csg
 			{
 				return AsImplicitMeshes(items, operation, processingMode, inputResolution, outputResolution);
 			}
+		}
+
+		/// <summary>
+		/// Perform a boolean operation via the Manifold native library.
+		/// All native P/Invoke calls are contained here so the caller can catch
+		/// any managed exception and fall back to CsgBySlicing.
+		/// </summary>
+		private static Mesh DoArrayViaManifold(
+			IEnumerable<(Mesh mesh, Matrix4X4 matrix)> items,
+			CsgModes operation,
+			CancellationToken cancellationToken,
+			Action<double, string> reporter,
+			double amountPerOperation,
+			double ratioCompleted,
+			Color[] meshColors)
+		{
+			bool trackColors = meshColors != null;
+
+			var manifolds = new List<ManifoldNET.Manifold>();
+			var originalIdToColor = new Dictionary<int, Color>();
+			var originalIdToSpatialColors = new Dictionary<int, List<(Vector3, Color)>>();
+			int meshIndex = 0;
+			foreach (var (mesh, matrix) in items)
+			{
+				if (mesh.Vertices.Count == 0 || mesh.Faces.Count == 0)
+				{
+					if (operation == CsgModes.Intersect)
+					{
+						return new Mesh();
+					}
+
+					if (meshIndex == 0 && operation == CsgModes.Subtract)
+					{
+						return new Mesh();
+					}
+
+					meshIndex++;
+					continue;
+				}
+
+				var meshCopy = mesh.Copy(CancellationToken.None);
+				meshCopy.Transform(matrix);
+
+				ManifoldNET.Manifold manifold = null;
+
+				if (trackColors && meshCopy.FaceColors != null)
+				{
+					manifold = TrySplitByFaceColors(meshCopy, originalIdToColor);
+				}
+
+				if (manifold == null)
+				{
+					var vertProperties = new List<float>();
+					var triVerts = new List<uint>();
+
+					foreach (var vertex in meshCopy.Vertices)
+					{
+						vertProperties.Add(vertex.X);
+						vertProperties.Add(vertex.Y);
+						vertProperties.Add(vertex.Z);
+					}
+
+					foreach (var face in meshCopy.Faces)
+					{
+						triVerts.Add((uint)face.v0);
+						triVerts.Add((uint)face.v1);
+						triVerts.Add((uint)face.v2);
+					}
+
+					var meshGlData = new ManifoldNET.MeshGLData(vertProperties.ToArray(), triVerts.ToArray(), 3);
+					var meshGl = new ManifoldNET.MeshGL(meshGlData);
+					manifold = ManifoldNET.Manifold.Create(meshGl);
+
+					if (trackColors)
+					{
+						manifold = manifold.AsOriginal();
+						if (meshCopy.FaceColors != null)
+						{
+							originalIdToSpatialColors[manifold.OriginalID] = meshCopy.SaveFaceCentroidColors();
+						}
+						else
+						{
+							var color = (meshColors != null && meshIndex < meshColors.Length)
+								? meshColors[meshIndex]
+								: new Color(200, 200, 200, 255);
+							originalIdToColor[manifold.OriginalID] = color;
+						}
+					}
+				}
+
+				manifolds.Add(manifold);
+				meshIndex++;
+			}
+
+			var opperationType = ManifoldNET.BoolOperationType.Add;
+
+			if (operation == CsgModes.Subtract)
+			{
+				opperationType = ManifoldNET.BoolOperationType.Subtract;
+			}
+			else if (operation == CsgModes.Intersect)
+			{
+				opperationType = ManifoldNET.BoolOperationType.Intersect;
+			}
+
+			ManifoldNET.Manifold boolResult = null;
+			if (manifolds.Count == 1)
+			{
+				boolResult = manifolds[0];
+			}
+			else if (manifolds.Count >= 2)
+			{
+				boolResult = ManifoldNET.Manifold.BatchBoolOperation(manifolds, opperationType);
+			}
+
+			var resultMesh = new Mesh();
+
+			if (boolResult != null)
+			{
+				var result = boolResult.MeshGL;
+				var resultNumProp = result.PropertiesNumber;
+				var vertices = result.VerticesProperties;
+				var indices = result.TriangleVertices;
+
+				for (int i = 0; i < vertices.Length; i += resultNumProp)
+				{
+					resultMesh.Vertices.Add(new Vector3(
+						vertices[i],
+						vertices[i + 1],
+						vertices[i + 2]));
+				}
+
+				for (int i = 0; i < indices.Length; i += 3)
+				{
+					resultMesh.Faces.Add(new Face(
+						indices[i],
+						indices[i + 1],
+						indices[i + 2],
+						resultMesh.Vertices));
+				}
+
+				if (trackColors && resultMesh.Faces.Count > 0)
+				{
+					var faceColors = ManifoldRunHelper.ExtractFaceColors(
+						result, resultMesh, originalIdToColor, originalIdToSpatialColors);
+					if (faceColors != null)
+					{
+						resultMesh.FaceColors = faceColors;
+					}
+				}
+			}
+
+			return resultMesh;
 		}
 
 		private static Mesh AsImplicitMeshes(IEnumerable<(Mesh mesh, Matrix4X4 matrix)> items,

@@ -230,6 +230,7 @@ namespace MatterHackers.Agg.UI
 				}
 				catch (Exception invokeException)
 				{
+					ReportUnhandledException(invokeException);
 				}
 #endif
 			}
