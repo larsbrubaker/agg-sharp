@@ -61,21 +61,29 @@ namespace Markdig.Renderers.Agg
 			double cellPadding = 2;
 			double height = newHeight + 2 * cellPadding;
 
-			//double maxChildHeight = this.Cells.Select(c => c.Height).Max();
+			// We need the row to be as tall as the tallest cell
+			double maxCellHeight = height;
+			foreach (var cell in this.Cells)
+			{
+				if (cell.Children.Count > 0 && cell.Children.First() is FlowLeftRightWithWrapping wrappedChild)
+				{
+					maxCellHeight = Math.Max(maxCellHeight, wrappedChild.Height + 2 * cellPadding);
+				}
+			}
 
-			if (this.RowHeight != height)
+			if (this.RowHeight != maxCellHeight)
 			{
 				foreach (var cell in this.Cells)
 				{
 					using (cell.LayoutLock())
 					{
-						cell.Height = height;
+						cell.Height = maxCellHeight;
 					}
 				}
 
 				using (this.LayoutLock())
 				{
-					this.Height = this.RowHeight = height;
+					this.Height = this.RowHeight = maxCellHeight;
 				}
 			}
 		}

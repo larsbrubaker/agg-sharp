@@ -2870,7 +2870,18 @@ namespace MatterHackers.RenderGl
 		// --- Misc ---
 
 		public ErrorCode GetError() => ErrorCode.NoError;
-		public string GetString(StringName name) => "Vortice Direct3D 11";
+
+		public string GetString(StringName name)
+		{
+			if (name == StringName.Extensions)
+			{
+				// D3D11 always supports non-power-of-two textures;
+				// ImageTexturePlugin checks for this to avoid unnecessary padding
+				return "ARB_texture_non_power_of_two";
+			}
+
+			return "Vortice Direct3D 11";
+		}
 		public void Finish() { }
 
 		public void Present()

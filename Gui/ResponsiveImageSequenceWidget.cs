@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright (c) 2018, Lars Brubaker
 All rights reserved.
 
@@ -140,7 +140,10 @@ namespace MatterHackers.Agg.UI
 			if (this.ImageSequence?.Frames.Count > 0)
 			{
 				var currentImage = ImageSequence.GetImageByTime(currentTime);
+				var oldQuality = graphics2D.ImageRenderQuality;
+				graphics2D.ImageRenderQuality = Graphics2D.TransformQuality.Best;
 				graphics2D.Render(currentImage, 0, 0, Width, Height);
+				graphics2D.ImageRenderQuality = oldQuality;
 			}
 
 			base.OnDraw(graphics2D);

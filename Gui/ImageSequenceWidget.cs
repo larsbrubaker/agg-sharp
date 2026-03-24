@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright (c) 2019, Lars Brubaker, John Lewin
 All rights reserved.
 
@@ -152,6 +152,8 @@ namespace MatterHackers.Agg.UI
 					}
 				}
 
+				var oldQuality = graphics2D.ImageRenderQuality;
+				graphics2D.ImageRenderQuality = Graphics2D.TransformQuality.Best;
 				graphics2D.Render(
 					currentImage,
 					Width / 2 - (currentImage.Width * ratio) / 2,
@@ -159,6 +161,7 @@ namespace MatterHackers.Agg.UI
 					0,
 					ratio,
 					ratio);
+				graphics2D.ImageRenderQuality = oldQuality;
 			}
 
 			base.OnDraw(graphics2D);
