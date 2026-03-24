@@ -1,4 +1,4 @@
-﻿/*
+/*
 Copyright (c) 2014, Lars Brubaker
 All rights reserved.
 
@@ -270,6 +270,9 @@ namespace MatterHackers.Agg.Image
 						break;
 					case ".gif":
 						imageFormat = SixLabors.ImageSharp.Formats.Gif.GifFormat.Instance;
+						break;
+					case ".webp":
+						imageFormat = SixLabors.ImageSharp.Formats.Webp.WebpFormat.Instance;
 						break;
 					default:
 						throw new NotImplementedException();
