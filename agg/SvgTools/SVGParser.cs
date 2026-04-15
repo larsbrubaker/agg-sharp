@@ -79,7 +79,11 @@ namespace MatterHackers.Agg.SvgTools
 
             foreach (var element in elements)
             {
+                if (element.FillEvenOdd)
+                    graphics.Rasterizer.filling_rule(Util.filling_rule_e.fill_even_odd);
                 graphics.Render(element.VertexSource, element.Color);
+                if (element.FillEvenOdd)
+                    graphics.Rasterizer.filling_rule(Util.filling_rule_e.fill_non_zero);
             }
 
             // SVG has Y=0 at top (Y increases down); agg-sharp has Y=0 at bottom (Y increases up).
@@ -133,7 +137,8 @@ namespace MatterHackers.Agg.SvgTools
 
                     if (HasFill(pathNode))
                     {
-                        items.Add(new ColoredVertexSource(FlipIfRequired(vertexStorage), ExtractFillColor(pathNode)));
+                        bool fillEvenOdd = pathNode.Attributes["fill-rule"]?.Value == "evenodd";
+                        items.Add(new ColoredVertexSource(FlipIfRequired(vertexStorage), ExtractFillColor(pathNode), fillEvenOdd));
                     }
 
                     var (strokeColor, strokeWidth) = ExtractStroke(pathNode);
