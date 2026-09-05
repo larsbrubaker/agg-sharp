@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2018, Lars Brubaker, John Lewin
+Copyright (c) 2026, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,7 @@ namespace MatterHackers.Agg.UI
 				this.ActuallNumberEdit = new NumberEdit(startingValue, 0, 0, theme.DefaultFontSize, pixelWidth, pixelHeight, allowNegatives, allowDecimals, minValue, maxValue, increment, tabIndex)
 				{
 					VAnchor = VAnchor.Bottom,
+					HAnchor = HAnchor.Left,
 				};
 
 				TextWidget labelWidget = null;
@@ -67,14 +68,36 @@ namespace MatterHackers.Agg.UI
 					this.AddChild(labelWidget);
 
 					var labelWidth = labelWidget.Width + labelWidget.Margin.Left;
-					ActuallNumberEdit.Margin = ActuallNumberEdit.Margin.Clone(left: labelWidth + 2);
+					ActuallNumberEdit.Margin = ActuallNumberEdit.Margin.Clone(left: labelWidth / DeviceScale + 2);
 				}
 
 				var internalWidget = this.ActuallNumberEdit.InternalTextEditWidget;
+				TextWidget unitWidget = null;
+				if (!string.IsNullOrEmpty(unitsLabel))
+				{
+					unitWidget = new TextWidget(unitsLabel, pointSize: theme.DefaultFontSize - 2, textColor: theme.PrimaryAccentColor)
+					{
+						Margin = new BorderDouble(right: 2), HAnchor = HAnchor.Right,
+						VAnchor = VAnchor.Center, Selectable = false
+					};
+					AddChild(unitWidget);
+					var reserve = unitWidget.Width + 4 * DeviceScale;
+					var width = ActuallNumberEdit.Width;
+					ActuallNumberEdit.MinimumSize = new MatterHackers.VectorMath.Vector2(
+						System.Math.Max(0, ActuallNumberEdit.MinimumSize.X - reserve), ActuallNumberEdit.MinimumSize.Y);
+					ActuallNumberEdit.Margin = ActuallNumberEdit.Margin.Clone(right: reserve / DeviceScale);
+					ActuallNumberEdit.Width = System.Math.Max(0, width - reserve);
+				}
 				internalWidget.TextColor = theme.EditFieldColors.Inactive.TextColor;
 				internalWidget.FocusChanged += (s, e) =>
 				{
 					internalWidget.TextColor = (internalWidget.Focused) ? theme.EditFieldColors.Focused.TextColor : theme.EditFieldColors.Inactive.TextColor;
+					if (unitWidget != null)
+					{
+						unitWidget.TextColor = internalWidget.Focused
+							? theme.PrimaryAccentColor.WithContrast(theme.EditFieldColors.Focused.BackgroundColor, 3).ToColor()
+							: theme.PrimaryAccentColor;
+					}
 
 					if (labelWidget != null)
 					{

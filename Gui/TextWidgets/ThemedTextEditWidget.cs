@@ -39,39 +39,55 @@ namespace MatterHackers.Agg.UI
 		private ThemeConfig theme;
 		private bool mouseInBounds = false;
 		private TextWidget leadingLabel;
-		private double leadingLabelWidth;
-		private double undecoratedMinimumWidth;
+		private TextWidget trailingLabel;
+		private double decoratorWidth;
+		private double? undecoratedMinimumWidth;
 
-		/// <summary>An accent label inside the field, like the axis label in ThemedNumberEdit.</summary>
+		/// <summary>An accent prefix inside the field, such as an axis label.</summary>
 		public string LeadingLabel
 		{
 			get => leadingLabel?.Text ?? "";
-			set
+			set => SetDecorator(ref leadingLabel, value, HAnchor.Left);
+		}
+
+		/// <summary>An accent suffix inside the field, such as a measurement unit.</summary>
+		public string TrailingLabel
+		{
+			get => trailingLabel?.Text ?? "";
+			set => SetDecorator(ref trailingLabel, value, HAnchor.Right);
+		}
+
+		private void SetDecorator(ref TextWidget label, string text, HAnchor anchor)
+		{
+			using (LayoutLock())
 			{
-				using (LayoutLock())
+				undecoratedMinimumWidth ??= ActualTextEditWidget.MinimumSize.X;
+				if (label == null)
 				{
-					if (leadingLabel == null)
+					label = new TextWidget("", pointSize: theme.DefaultFontSize - 2, textColor: theme.PrimaryAccentColor)
 					{
-						undecoratedMinimumWidth = ActualTextEditWidget.MinimumSize.X;
-						leadingLabel = new TextWidget("", pointSize: theme.DefaultFontSize - 2, textColor: theme.PrimaryAccentColor)
-						{
-							Margin = new BorderDouble(left: 2), HAnchor = HAnchor.Left, VAnchor = VAnchor.Center,
-							Selectable = false, AutoExpandBoundsToText = true
-						};
-						AddChild(leadingLabel);
-					}
-					leadingLabel.Text = value ?? "";
-					leadingLabel.Visible = !string.IsNullOrEmpty(value);
-					var reserve = leadingLabel.Visible ? leadingLabel.Width + 4 * DeviceScale : 0;
-					// Reserve space INSIDE the existing width so decorated and plain fields align.
-					var width = ActualTextEditWidget.Width + leadingLabelWidth - reserve;
-					ActualTextEditWidget.MinimumSize = new Vector2(Math.Max(0, undecoratedMinimumWidth - reserve), ActualTextEditWidget.MinimumSize.Y);
-					ActualTextEditWidget.Margin = ActualTextEditWidget.Margin.Clone(left: reserve / DeviceScale);
-					ActualTextEditWidget.Width = Math.Max(0, width);
-					leadingLabelWidth = reserve;
+						Margin = anchor == HAnchor.Left ? new BorderDouble(left: 2) : new BorderDouble(right: 2),
+						HAnchor = anchor, VAnchor = VAnchor.Center,
+						Selectable = false, AutoExpandBoundsToText = true
+					};
+					AddChild(label);
 				}
-				Invalidate();
+				label.Text = text ?? "";
+				label.Visible = !string.IsNullOrEmpty(text);
+				var left = leadingLabel?.Visible == true ? leadingLabel.Width + 4 * DeviceScale : 0;
+				var right = trailingLabel?.Visible == true ? trailingLabel.Width + 4 * DeviceScale : 0;
+				var reserve = left + right;
+				if ((ActualTextEditWidget.HAnchor & (HAnchor.Left | HAnchor.Center | HAnchor.Right)) == 0)
+					ActualTextEditWidget.HAnchor |= HAnchor.Left;
+				// Reserve both labels INSIDE the existing width so decorated and plain fields align.
+				var width = ActualTextEditWidget.Width + decoratorWidth - reserve;
+				ActualTextEditWidget.MinimumSize = new Vector2(Math.Max(0, undecoratedMinimumWidth.Value - reserve), ActualTextEditWidget.MinimumSize.Y);
+				ActualTextEditWidget.Margin = ActualTextEditWidget.Margin.Clone(left: left / DeviceScale, right: right / DeviceScale);
+				ActualTextEditWidget.Width = Math.Max(0, width);
+				decoratorWidth = reserve;
 			}
+			PerformLayout();
+			Invalidate();
 		}
 
 		public ThemedTextEditWidget(string text, ThemeConfig theme, double pixelWidth = 0, double pixelHeight = 0, bool multiLine = false, int tabIndex = 0, string messageWhenEmptyAndNotSelected = "", TypeFace typeFace = null)
@@ -100,6 +116,9 @@ namespace MatterHackers.Agg.UI
 			{
 				internalWidget.TextColor = internalWidget.Focused ? theme.EditFieldColors.Focused.TextColor : theme.EditFieldColors.Inactive.TextColor;
 				NoContentFieldDescription.TextColor = internalWidget.Focused ? theme.EditFieldColors.Focused.LightTextColor : theme.EditFieldColors.Inactive.LightTextColor;
+				if (trailingLabel != null) trailingLabel.TextColor = internalWidget.Focused
+					? theme.PrimaryAccentColor.WithContrast(theme.EditFieldColors.Focused.BackgroundColor, 3).ToColor()
+					: theme.PrimaryAccentColor;
 				if (leadingLabel != null) leadingLabel.TextColor = internalWidget.Focused
 					? theme.PrimaryAccentColor.WithContrast(theme.EditFieldColors.Focused.BackgroundColor, 3).ToColor()
 					: theme.PrimaryAccentColor;
