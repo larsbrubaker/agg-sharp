@@ -29,7 +29,7 @@ namespace MatterHackers.Agg.UI
 		private Cursors cursor;
 		private bool mouseIsDown = false;
 		private MouseButtons dragButton = MouseButtons.None;
-		private Vector2 downScreenPosition;
+		private Vector2 downPosition;
 		private GuiWidget perviousParent;
 
 		public GrabControl(Cursors cursor)
@@ -38,12 +38,15 @@ namespace MatterHackers.Agg.UI
 		}
 
 		/// <summary>
-		/// How far the mouse has travelled since the press that started the drag, in screen space.
+		/// How far the mouse has travelled since the press that started the drag, in the coordinates of the
+		/// window's parent - the units the window's Size and Position are in.
 		/// </summary>
 		/// <remarks>
-		/// Screen space, and measured from the press rather than from the previous move, because the handle is
-		/// edge anchored: it slides out from under the mouse as the window resizes, so its local coordinates
-		/// are a reference frame that moves with what is being measured.
+		/// Measured from the press rather than from the previous move, because the handle is edge anchored: it
+		/// slides out from under the mouse as the window resizes, so its local coordinates are a reference
+		/// frame that moves with what is being measured. The window's parent does not move during the drag.
+		/// Not screen space: a window inside a zoomed container (the geometry-node editor's graph) would then
+		/// grow by the mouse travel times the zoom and its edge would run away from the mouse.
 		/// </remarks>
 		public Vector2 DragDelta { get; private set; }
 
@@ -69,7 +72,7 @@ namespace MatterHackers.Agg.UI
 
 			if (mouseIsDown)
 			{
-				downScreenPosition = this.TransformToScreenSpace(mouseEvent.Position);
+				downPosition = MouseInWindowParent(mouseEvent);
 				DragDelta = Vector2.Zero;
 				ParentSizeAtMouseDown = Parent == null ? Vector2.Zero : Parent.Size;
 				ParentPositionAtMouseDown = Parent == null ? Vector2.Zero : Parent.Position;
@@ -92,12 +95,24 @@ namespace MatterHackers.Agg.UI
 				}
 				else if (Parent?.Resizable == true)
 				{
-					DragDelta = this.TransformToScreenSpace(mouseEvent.Position) - downScreenPosition;
+					DragDelta = MouseInWindowParent(mouseEvent) - downPosition;
 					AdjustParent?.Invoke(this);
 				}
 			}
 
 			base.OnMouseMove(mouseEvent);
+		}
+
+		/// <summary>
+		/// The mouse in the coordinates the window is placed in, by way of the screen so every transform
+		/// between here and there - a container's zoom included - is undone. Screen space when the window has
+		/// no parent.
+		/// </summary>
+		private Vector2 MouseInWindowParent(MouseEventArgs mouseEvent)
+		{
+			var screen = this.TransformToScreenSpace(mouseEvent.Position);
+			var windowParent = Parent?.Parent;
+			return windowParent == null ? screen : windowParent.TransformFromScreenSpace(screen);
 		}
 
 		public override void OnMouseUp(MouseEventArgs mouseEvent)

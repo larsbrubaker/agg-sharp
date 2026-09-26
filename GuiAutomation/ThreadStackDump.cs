@@ -85,7 +85,8 @@ namespace MatterHackers.GuiAutomation
 		/// stack-pointer-to-thread-id map (<c>MachOCoreDump</c>'s constructor, unchanged from 3.0 through
 		/// <c>main</c>, so 4.x is no escape). Two contexts whose stack pointers collapse to one id - which is
 		/// what a dump of a mutating thread list can contain - make its <c>Dictionary.Add</c> throw
-		/// "An item with the same key has already been added".</item>
+		/// "An item with the same key has already been added". That one did not always clear on a retry, so
+		/// <see cref="DropThreadContextsWithRepeatedStackPointers"/> now repairs the file before it is read.</item>
 		/// </list>
 		/// Both are properties of the *captured file*, not of the parse, so a retry has to write a whole new dump
 		/// rather than re-read the one that failed.
@@ -187,37 +188,9 @@ namespace MatterHackers.GuiAutomation
 
 			try
 			{
-				// DumpType.Normal is thread stacks plus the minimum the stack walker needs. WithHeap or Full
-				// would answer questions nobody is asking here and cost orders of magnitude more time and disk.
-				new DiagnosticsClient(Environment.ProcessId).WriteDump(DumpType.Normal, dumpPath, logDumpGeneration: false);
+				WriteDumpOfThisProcess(dumpPath);
 
-				long dumpBytes = new FileInfo(dumpPath).Length;
-				long writeMilliseconds = timer.ElapsedMilliseconds;
-
-				var report = new StringBuilder();
-				report.AppendLine("======================= ALL MANAGED THREAD STACKS =======================");
-				report.AppendLine($"reason: {reason}");
-				report.AppendLine($"process {Environment.ProcessId} at {DateTime.Now:HH:mm:ss.fff}, dump {dumpBytes / (1024 * 1024)} MB written in {writeMilliseconds} ms");
-
-				using (var dataTarget = DataTarget.LoadDump(dumpPath))
-				{
-					int runtimeCount = 0;
-
-					foreach (var clrInfo in dataTarget.ClrVersions)
-					{
-						runtimeCount++;
-						AppendRuntimeThreads(report, clrInfo.CreateRuntime());
-					}
-
-					if (runtimeCount == 0)
-					{
-						report.AppendLine("(no CLR found in the dump - nothing to walk)");
-					}
-				}
-
-				report.AppendLine($"===================== END THREAD STACKS ({timer.ElapsedMilliseconds} ms) =====================");
-
-				return report.ToString();
+				return ReportFromDump(reason, dumpPath, timer.ElapsedMilliseconds, timer);
 			}
 			finally
 			{
@@ -230,6 +203,198 @@ namespace MatterHackers.GuiAutomation
 					// A leaked temp file is not worth failing a diagnostic over; the OS will clear it.
 				}
 			}
+		}
+
+		/// <summary>
+		/// Asks the runtime's diagnostic server to write a minidump of this process to <paramref name="dumpPath"/>.
+		/// </summary>
+		internal static void WriteDumpOfThisProcess(string dumpPath)
+		{
+			// DumpType.Normal is thread stacks plus the minimum the stack walker needs. WithHeap or Full
+			// would answer questions nobody is asking here and cost orders of magnitude more time and disk.
+			new DiagnosticsClient(Environment.ProcessId).WriteDump(DumpType.Normal, dumpPath, logDumpGeneration: false);
+		}
+
+		/// <summary>
+		/// Walks an already written dump and builds the all-thread report from it. May modify the file - see
+		/// <see cref="DropThreadContextsWithRepeatedStackPointers"/>.
+		/// </summary>
+		/// <param name="reason">Why the dump was taken.</param>
+		/// <param name="dumpPath">The dump to read; owned by the caller, who deletes it.</param>
+		/// <param name="writeMilliseconds">How long writing the dump took, for the header line.</param>
+		/// <param name="timer">Started when the capture began; its total goes in the footer.</param>
+		internal static string ReportFromDump(string reason, string dumpPath, long writeMilliseconds, Stopwatch timer)
+		{
+			int droppedContexts = DropThreadContextsWithRepeatedStackPointers(dumpPath);
+			long dumpBytes = new FileInfo(dumpPath).Length;
+
+			var report = new StringBuilder();
+			report.AppendLine("======================= ALL MANAGED THREAD STACKS =======================");
+			report.AppendLine($"reason: {reason}");
+			report.AppendLine($"process {Environment.ProcessId} at {DateTime.Now:HH:mm:ss.fff}, dump {dumpBytes / (1024 * 1024)} MB written in {writeMilliseconds} ms");
+
+			if (droppedContexts > 0)
+			{
+				report.AppendLine($"({droppedContexts} thread register context(s) repeated an earlier thread's stack pointer and were dropped; the thread that owns that stack pointer keeps the first one, others may show no frames)");
+			}
+
+			using (var dataTarget = DataTarget.LoadDump(dumpPath))
+			{
+				int runtimeCount = 0;
+
+				foreach (var clrInfo in dataTarget.ClrVersions)
+				{
+					runtimeCount++;
+					AppendRuntimeThreads(report, clrInfo.CreateRuntime());
+				}
+
+				if (runtimeCount == 0)
+				{
+					report.AppendLine("(no CLR found in the dump - nothing to walk)");
+				}
+			}
+
+			report.AppendLine($"===================== END THREAD STACKS ({timer.ElapsedMilliseconds} ms) =====================");
+
+			return report.ToString();
+		}
+
+		private const uint MachOMagic64 = 0xFEEDFACF;
+		private const uint MachOCpuTypeX86_64 = 0x01000007;
+		private const uint MachOCpuTypeArm64 = 0x0100000C;
+		private const uint MachOLoadCommandThread = 0x4;
+
+		/// <summary>
+		/// Written over the command type of a dropped LC_THREAD. ClrMD's load command loop only acts on
+		/// LC_SEGMENT_64 and LC_THREAD and skips anything else by its size, and 0 is no Mach-O command.
+		/// </summary>
+		private const uint MachOIgnoredLoadCommand = 0;
+
+		/// <summary>
+		/// Offset of each LC_THREAD in a mac core dump, with the stack pointer ClrMD will read from it.
+		/// Empty for anything that is not a 64-bit Mach-O of a CPU ClrMD reads (Windows minidumps, Linux ELF cores).
+		/// </summary>
+		/// <remarks>
+		/// Mirrors ClrMD 3.1's <c>MachOCoreDump</c> constructor: a thread command whose flavor is not the CPU's
+		/// general register set leaves its context zeroed, so its stack pointer reads as 0.
+		/// </remarks>
+		internal static List<(long CommandOffset, ulong StackPointer)> ReadThreadStackPointers(Stream stream)
+		{
+			var threads = new List<(long, ulong)>();
+			var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
+
+			if (stream.Length < 32)
+			{
+				return threads;
+			}
+
+			stream.Position = 0;
+			uint magic = reader.ReadUInt32();
+			uint cpuType = reader.ReadUInt32();
+
+			// thread_command is cmd, cmdsize, flavor, count, then the register state.
+			const int stateOffset = 16;
+			uint generalRegistersFlavor;
+			int stackPointerOffset;
+
+			if (magic != MachOMagic64)
+			{
+				return threads;
+			}
+			else if (cpuType == MachOCpuTypeArm64)
+			{
+				// ARM_THREAD_STATE64: x0-x28, fp, lr, then sp.
+				generalRegistersFlavor = 6;
+				stackPointerOffset = 29 * 8 + 2 * 8;
+			}
+			else if (cpuType == MachOCpuTypeX86_64)
+			{
+				// x86_THREAD_STATE64: rax, rbx, rcx, rdx, rdi, rsi, rbp, then rsp.
+				generalRegistersFlavor = 4;
+				stackPointerOffset = 7 * 8;
+			}
+			else
+			{
+				return threads;
+			}
+
+			stream.Position = 16;
+			uint commandCount = reader.ReadUInt32();
+			long commandStart = 32;
+
+			for (uint i = 0; i < commandCount && commandStart + 8 <= stream.Length; i++)
+			{
+				stream.Position = commandStart;
+				uint command = reader.ReadUInt32();
+				uint commandSize = reader.ReadUInt32();
+
+				if (commandSize < 8)
+				{
+					// Corrupt; ClrMD will say so better than a guess here would.
+					break;
+				}
+
+				if (commandStart + commandSize > stream.Length)
+				{
+					// Truncated: the command runs past the end of the file. Reading its registers would throw, so
+					// stop here and leave the dump for ClrMD to judge.
+					break;
+				}
+
+				if (command == MachOLoadCommandThread)
+				{
+					ulong stackPointer = 0;
+
+					if (commandSize >= stateOffset + stackPointerOffset + 8 && reader.ReadUInt32() == generalRegistersFlavor)
+					{
+						stream.Position = commandStart + stateOffset + stackPointerOffset;
+						stackPointer = reader.ReadUInt64();
+					}
+
+					threads.Add((commandStart, stackPointer));
+				}
+
+				commandStart += commandSize;
+			}
+
+			return threads;
+		}
+
+		/// <summary>
+		/// Keeps ClrMD's mac core reader from rejecting a whole dump because two thread contexts share a stack
+		/// pointer: every thread command after the first with a given stack pointer is turned into a command
+		/// ClrMD skips. Returns how many were dropped. Does nothing to a dump that is not a Mach-O core.
+		/// </summary>
+		/// <remarks>
+		/// ClrMD's <c>MachOCoreDump</c> constructor maps each context's stack pointer to a thread id through
+		/// createdump's THREADINFO table and then <c>Dictionary.Add</c>s the context under that id, so two
+		/// contexts with one stack pointer throw "An item with the same key has already been added" and the
+		/// dump cannot be opened at all. That state is not always a passing race: one full agg suite run lost
+		/// all five attempts with the same key, so whatever left two contexts on one stack pointer outlived
+		/// every re-capture. At most one of the two contexts can be that thread's real registers, and one
+		/// thread with no frames beats a report with no threads. Keeping the first is what a non-throwing
+		/// add in ClrMD would have done.
+		/// </remarks>
+		internal static int DropThreadContextsWithRepeatedStackPointers(string dumpPath)
+		{
+			using var stream = new FileStream(dumpPath, FileMode.Open, FileAccess.ReadWrite);
+			var seenStackPointers = new HashSet<ulong>();
+			var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
+			int dropped = 0;
+
+			foreach (var (commandOffset, stackPointer) in ReadThreadStackPointers(stream))
+			{
+				if (!seenStackPointers.Add(stackPointer))
+				{
+					stream.Position = commandOffset;
+					writer.Write(MachOIgnoredLoadCommand);
+					dropped++;
+				}
+			}
+
+			writer.Flush();
+
+			return dropped;
 		}
 
 		/// <summary>

@@ -441,11 +441,9 @@ namespace MatterHackers.Agg.UI
 		/// <summary>
 		/// Gets the border and padding scaled by the DeviceScale
 		/// </summary>
-		public BorderDouble DevicePadding
-		{
-			get;
-			private set;
-		}
+		public BorderDouble DevicePadding => devicePadding;
+
+		private BorderDouble devicePadding;
 
 		/// <summary>
 		/// Called when the padding has changed
@@ -467,10 +465,11 @@ namespace MatterHackers.Agg.UI
 					if (_padding != value)
 					{
 						_padding = value;
-						DevicePadding = _padding * GuiWidget.DeviceScale;
+						devicePadding = _padding * GuiWidget.DeviceScale;
 						if (EnforceIntegerBounds)
 						{
-							DevicePadding.Round();
+							// round the field: Round() mutates, so calling it on the property's returned copy did nothing
+							devicePadding.Round();
 						}
 
 						// the padding affects the children so make sure they are laid out
@@ -563,7 +562,19 @@ namespace MatterHackers.Agg.UI
 		private BorderDouble deviceMargin;
 
 		/// <summary>
-		/// Gets the Margin scaled by the DeviceScale
+		/// Gets the Margin scaled by the DeviceScale - the device-pixel margin layout places this widget with, for
+		/// code that adds the margin to bounds (which are device pixels).
+		/// </summary>
+		public BorderDouble DeviceMargin => deviceMargin;
+
+		/// <summary>
+		/// Gets the Border scaled by the DeviceScale - the device-pixel border, for code that places a widget or
+		/// its contents inside bounds (which are device pixels).
+		/// </summary>
+		public BorderDouble DeviceBorder => deviceBorder;
+
+		/// <summary>
+		/// Gets the Margin and Border scaled by the DeviceScale
 		/// </summary>
 		public BorderDouble DeviceMarginAndBorder
 		{
@@ -1305,6 +1316,14 @@ namespace MatterHackers.Agg.UI
 			}
 		}
 
+		/// <summary>
+		/// This widget's <see cref="LocalBounds"/> offset by the translation of its <see cref="ParentToChildTransform"/>.
+		/// </summary>
+		/// <remarks>
+		/// Layout data, translation only: every layout pass places children with it, and under a parent that scales
+		/// its children (a zoomable canvas) it is not where the widget is drawn. For drawn positions use
+		/// <see cref="BoundsInParent"/> or the TransformToParentSpace / TransformFromParentSpace / screen-space helpers.
+		/// </remarks>
 		public RectangleDouble BoundsRelativeToParent
 		{
 			get
@@ -1402,7 +1421,8 @@ namespace MatterHackers.Agg.UI
 					else
 					{
 						RectangleDouble childBoundsWithMargin = child.BoundsRelativeToParent;
-						childBoundsWithMargin.Inflate(child.Margin);
+						// bounds are device pixels, so the margin must be too (the anchor branch above already is)
+						childBoundsWithMargin.Inflate(child.DeviceMargin);
 						boundsOfAllChildrenIncludingMargin.ExpandToInclude(childBoundsWithMargin);
 					}
 				}
@@ -3120,71 +3140,152 @@ namespace MatterHackers.Agg.UI
 			Closed?.Invoke(this, e);
 		}
 
+		/// <summary>
+		/// A point in <paramref name="parentToGetRelativeTo"/>'s coordinates (the root's when null), in this widget's own.
+		/// </summary>
+		/// <remarks>
+		/// The exact inverse of <see cref="TransformToParentSpace(GuiWidget, Vector2)"/>: it undoes this widget's
+		/// <see cref="ParentToChildTransform"/> and every ancestor's below <paramref name="parentToGetRelativeTo"/>,
+		/// scale included. It used to subtract only the ancestors' <see cref="BoundsRelativeToParent"/> corners -
+		/// skipping this widget's own offset and any zoom - so a point read back from a zoomed node editor, or into
+		/// a widget not at its parent's origin, landed somewhere it was not drawn.
+		/// </remarks>
 		public Vector2 TransformFromParentSpace(GuiWidget parentToGetRelativeTo, Vector2 position)
 		{
-			GuiWidget parent = Parent;
-			while (parent != null
-				&& parent != parentToGetRelativeTo)
+			// Undo the outermost transform first, so walk up collecting the chain and apply it top down.
+			var chain = ChainBelow(parentToGetRelativeTo);
+			for (int i = chain.Count - 1; i >= 0; i--)
 			{
-				position -= new Vector2(parent.BoundsRelativeToParent.Left, parent.BoundsRelativeToParent.Bottom);
-				parent = parent.Parent;
+				position = InverseTransformedPoint(chain[i].ParentToChildTransform, position);
 			}
 
 			return position;
 		}
 
+		/// <summary>
+		/// A point in this widget's own coordinates, in <paramref name="parentToGetRelativeTo"/>'s (the root's when null),
+		/// through each widget's full <see cref="ParentToChildTransform"/> - where it is drawn under a zoomed ancestor.
+		/// </summary>
 		public Vector2 TransformToParentSpace(GuiWidget parentToGetRelativeTo, Vector2 inPosition)
 		{
-			var bPosition = inPosition;
 			GuiWidget widgetToTransformBy = this;
 			while (widgetToTransformBy != null
 				&& widgetToTransformBy != parentToGetRelativeTo)
 			{
-				bPosition += new Vector2(widgetToTransformBy.BoundsRelativeToParent.Left, widgetToTransformBy.BoundsRelativeToParent.Bottom);
+				inPosition = TransformedPoint(widgetToTransformBy.parentToChildTransform, inPosition);
 				widgetToTransformBy = widgetToTransformBy.Parent;
 			}
 
-			var mPosition = inPosition;
-			widgetToTransformBy = this;
-			while (widgetToTransformBy != null
-				&& widgetToTransformBy != parentToGetRelativeTo)
-			{
-				mPosition.X += widgetToTransformBy.parentToChildTransform.tx;
-				mPosition.Y += widgetToTransformBy.parentToChildTransform.ty;
-				widgetToTransformBy = widgetToTransformBy.Parent;
-			}
-
-			if (bPosition != mPosition)
-			{
-			}
-
-			return mPosition;
+			return inPosition;
 		}
 
+		/// <summary>
+		/// <paramref name="point"/> mapped through <paramref name="transform"/>, staying finite where
+		/// <see cref="Affine.Transform(Vector2)"/> would not.
+		/// </summary>
+		/// <remarks>
+		/// Affine multiplies every coordinate by every matrix term, so an infinite coordinate (an unbounded edge
+		/// under a shrinking ancestor) times a zero term makes the other axis NaN. A zero term contributes nothing,
+		/// so it is skipped - the same rule as <see cref="ExpandToIncludeTransformedCorner"/>. Without shear the
+		/// axes are mapped separately, which keeps pure translation exactly the old <c>x + tx</c> offset.
+		/// </remarks>
+		private static Vector2 TransformedPoint(Affine transform, Vector2 point)
+		{
+			if (transform.shx == 0 && transform.shy == 0)
+			{
+				return new Vector2(
+					(transform.sx == 0 ? 0 : point.X * transform.sx) + transform.tx,
+					(transform.sy == 0 ? 0 : point.Y * transform.sy) + transform.ty);
+			}
+
+			return new Vector2(
+				(transform.sx == 0 ? 0 : point.X * transform.sx) + (transform.shx == 0 ? 0 : point.Y * transform.shx) + transform.tx,
+				(transform.shy == 0 ? 0 : point.X * transform.shy) + (transform.sy == 0 ? 0 : point.Y * transform.sy) + transform.ty);
+		}
+
+		/// <summary>
+		/// <paramref name="point"/> mapped back through <paramref name="transform"/> - the inverse of
+		/// <see cref="TransformedPoint"/> - staying finite where <see cref="Affine.inverse_transform(ref Vector2)"/> would not.
+		/// </summary>
+		/// <remarks>
+		/// Besides the infinity-times-zero NaN, a transform with a zero scale (a collapsed widget) has no inverse and
+		/// Affine returns NaN or infinity. Every point on a collapsed axis is drawn at the same place, so any answer
+		/// is as good as another; that axis falls back to removing the translation only, the offset these helpers
+		/// always used, which keeps a caller's arithmetic finite. Without shear the axes are undone separately, which
+		/// keeps pure translation exactly the old <c>x - tx</c> offset; a singular sheared transform falls back the
+		/// same way on both axes.
+		/// </remarks>
+		private static Vector2 InverseTransformedPoint(Affine transform, Vector2 point)
+		{
+			if (transform.shx == 0 && transform.shy == 0)
+			{
+				return new Vector2(
+					transform.sx == 0 ? point.X - transform.tx : (point.X - transform.tx) / transform.sx,
+					transform.sy == 0 ? point.Y - transform.ty : (point.Y - transform.ty) / transform.sy);
+			}
+
+			double determinant = transform.sx * transform.sy - transform.shy * transform.shx;
+			if (determinant == 0 || !double.IsFinite(determinant))
+			{
+				return new Vector2(point.X - transform.tx, point.Y - transform.ty);
+			}
+
+			var inverse = transform;
+			inverse.invert();
+			return TransformedPoint(inverse, point);
+		}
+
+		/// <summary>
+		/// A rectangle in <paramref name="parentToGetRelativeTo"/>'s coordinates (the root's when null), as the
+		/// axis-aligned bounds it covers in this widget's own - the inverse of
+		/// <see cref="TransformToParentSpace(GuiWidget, RectangleDouble)"/>, scale included.
+		/// </summary>
 		public RectangleDouble TransformFromParentSpace(GuiWidget parentToGetRelativeTo, RectangleDouble rectangleToTransform)
 		{
-			GuiWidget parent = Parent;
-			while (parent != null
-				&& parent != parentToGetRelativeTo)
+			var chain = ChainBelow(parentToGetRelativeTo);
+			for (int i = chain.Count - 1; i >= 0; i--)
 			{
-				rectangleToTransform.Offset(-parent.BoundsRelativeToParent.Left, -parent.BoundsRelativeToParent.Bottom);
-				parent = parent.Parent;
+				var parentFromChild = chain[i].ParentToChildTransform;
+				parentFromChild.invert();
+				rectangleToTransform = TransformedBounds(parentFromChild, rectangleToTransform);
 			}
 
 			return rectangleToTransform;
 		}
 
+		/// <summary>
+		/// A rectangle in this widget's own coordinates, as the axis-aligned bounds it covers in
+		/// <paramref name="parentToGetRelativeTo"/>'s (the root's when null) - where it is drawn under a zoomed ancestor.
+		/// </summary>
 		public RectangleDouble TransformToParentSpace(GuiWidget parentToGetRelativeTo, RectangleDouble rectangleToTransform)
 		{
 			GuiWidget widgetToTransformBy = this;
 			while (widgetToTransformBy != null
 				&& widgetToTransformBy != parentToGetRelativeTo)
 			{
-                widgetToTransformBy.ParentToChildTransform.transform(ref rectangleToTransform);
-                widgetToTransformBy = widgetToTransformBy.Parent;
+				rectangleToTransform = widgetToTransformBy.BoundsInParent(rectangleToTransform);
+				widgetToTransformBy = widgetToTransformBy.Parent;
 			}
 
 			return rectangleToTransform;
+		}
+
+		/// <summary>
+		/// This widget and its ancestors up to, not including, <paramref name="parentToGetRelativeTo"/> (all of
+		/// them when null), innermost first - the widgets whose transforms separate the two coordinate spaces.
+		/// </summary>
+		private List<GuiWidget> ChainBelow(GuiWidget parentToGetRelativeTo)
+		{
+			var chain = new List<GuiWidget>();
+			GuiWidget widget = this;
+			while (widget != null
+				&& widget != parentToGetRelativeTo)
+			{
+				chain.Add(widget);
+				widget = widget.Parent;
+			}
+
+			return chain;
 		}
 
         public Vector2 TransformToScreenSpace(Vector2 vectorToTransform)
@@ -3195,7 +3296,7 @@ namespace MatterHackers.Agg.UI
             while (prevGUIWidget != null
                 && !(prevGUIWidget is SystemWindow && prevGUIWidget.Parent == null))
             {
-				vectorToTransform = prevGUIWidget.ParentToChildTransform.Transform(vectorToTransform);
+				vectorToTransform = TransformedPoint(prevGUIWidget.ParentToChildTransform, vectorToTransform);
                 prevGUIWidget = prevGUIWidget.Parent;
             }
 
@@ -3211,9 +3312,21 @@ namespace MatterHackers.Agg.UI
 			return this.Parents<SystemWindow>().FirstOrDefault() ?? this.Parents<GuiWidget>().Last();
 		}
 
+		/// <summary>
+		/// A screen point in this widget's own coordinates - the inverse of <see cref="TransformToScreenSpace(Vector2)"/>,
+		/// undoing the same transforms (a parentless <see cref="SystemWindow"/>'s is not one of them), scale included.
+		/// </summary>
 		public Vector2 TransformFromScreenSpace(Vector2 vectorToTransform)
 		{
-			return this.TransformFromParentSpace(TopmostParent(), vectorToTransform);
+			GuiWidget root = this;
+			while (root.Parent != null)
+			{
+				root = root.Parent;
+			}
+
+			return root is SystemWindow
+				? this.TransformFromParentSpace(root, vectorToTransform)
+				: this.TransformFromParentSpace(null, vectorToTransform);
 		}
 
 		public RectangleDouble TransformToScreenSpace(RectangleDouble rectangleToTransform)
@@ -3221,9 +3334,13 @@ namespace MatterHackers.Agg.UI
             return TransformToParentSpace(null, rectangleToTransform);            
 		}
 
+		/// <summary>
+		/// A screen rectangle as the bounds it covers in this widget's own coordinates - the inverse of
+		/// <see cref="TransformToScreenSpace(RectangleDouble)"/>, scale included.
+		/// </summary>
 		public RectangleDouble TransformFromScreenSpace(RectangleDouble rectangleToTransform)
 		{
-			return this.TransformFromParentSpace(TopmostParent(), rectangleToTransform);
+			return this.TransformFromParentSpace(null, rectangleToTransform);
 		}
 
 		protected GuiWidget GetChildContainingFocus()

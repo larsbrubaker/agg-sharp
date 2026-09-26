@@ -28,10 +28,14 @@ either expressed or implied, of the FreeBSD Project.
 */
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using MatterHackers.GuiAutomation;
+using Microsoft.Diagnostics.Runtime;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core;
@@ -168,6 +172,134 @@ namespace MatterHackers.Agg.UI.Tests
 			await Assert.That(thrown.InnerExceptions.Count).IsEqualTo(ThreadStackDump.CaptureAttempts);
 			await Assert.That(thrown.Message).Contains("proving the retry is bounded");
 			await Assert.That(thrown.Message).Contains($"capture {ThreadStackDump.CaptureAttempts} failed");
+		}
+
+		/// <summary>
+		/// A dump cut off inside a thread command is left for ClrMD to judge: reading the stack pointers stops at
+		/// the truncated command instead of throwing past the end of the file.
+		/// </summary>
+		[Test]
+		public async Task ATruncatedThreadCommandIsNotRead()
+		{
+			using var stream = new MemoryStream();
+			var writer = new BinaryWriter(stream);
+			writer.Write(0xFEEDFACFu); // MH_MAGIC_64
+			writer.Write(0x0100000Cu); // CPU_TYPE_ARM64
+			writer.Write(0u); // cpusubtype
+			writer.Write(4u); // filetype MH_CORE
+			writer.Write(1u); // ncmds
+			writer.Write(0u); // sizeofcmds
+			writer.Write(0u); // flags
+			writer.Write(0u); // reserved
+			writer.Write(4u); // LC_THREAD
+			writer.Write(400u); // cmdsize, running far past the end of the stream
+			writer.Write(6u); // ARM_THREAD_STATE64
+			writer.Write(68u); // count
+			writer.Flush();
+
+			var threads = ThreadStackDump.ReadThreadStackPointers(stream);
+
+			await Assert.That(threads.Count).IsEqualTo(0);
+		}
+
+		/// <summary>
+		/// Two thread contexts on one stack pointer made ClrMD's mac core reader throw "An item with the same key
+		/// has already been added" - and in one full suite run it did so on all five re-captures, so the retry
+		/// alone could not save the report. This builds that dump on purpose, from a real one, and requires a
+		/// report from it anyway.
+		/// </summary>
+		[Test]
+		public async Task ADumpWithTwoThreadsOnOneStackPointerStillReports()
+		{
+			if (!OperatingSystem.IsMacOS())
+			{
+				// Only the mac reader keys contexts by stack pointer; other platforms' dumps are not Mach-O.
+				return;
+			}
+
+			string dumpPath = Path.Combine(Path.GetTempPath(), $"agg-threadstacks-test-{Guid.NewGuid():N}.dmp");
+
+			try
+			{
+				ThreadStackDump.WriteDumpOfThisProcess(dumpPath);
+
+				using (var stream = new FileStream(dumpPath, FileMode.Open, FileAccess.ReadWrite))
+				{
+					var threads = ThreadStackDump.ReadThreadStackPointers(stream);
+					await Assert.That(threads.Count).IsGreaterThan(1);
+
+					// Give the second thread command the first one's stack pointer, in place.
+					var writer = new BinaryWriter(stream);
+					foreach (long position in StackPointerValuePositions(stream, threads[1].CommandOffset, threads[1].StackPointer))
+					{
+						stream.Position = position;
+						writer.Write(threads[0].StackPointer);
+					}
+
+					writer.Flush();
+
+					// The production reader must now see the repeat, or the rest of this test proves nothing.
+					var rewritten = ThreadStackDump.ReadThreadStackPointers(stream);
+					await Assert.That(rewritten[1].StackPointer).IsEqualTo(threads[0].StackPointer);
+				}
+
+				// The reproduction: unrepaired, ClrMD cannot open this dump at all.
+				Exception unrepaired = null;
+				try
+				{
+					DataTarget.LoadDump(dumpPath).Dispose();
+				}
+				catch (ArgumentException ex)
+				{
+					unrepaired = ex;
+				}
+
+				await Assert.That(unrepaired).IsNotNull();
+				await Assert.That(unrepaired.Message).Contains("same key");
+
+				string report = ThreadStackDump.ReportFromDump("proving a repeated stack pointer is survivable", dumpPath, 0, Stopwatch.StartNew());
+
+				await Assert.That(report).Contains("END THREAD STACKS");
+				await Assert.That(report).Contains("1 thread register context(s) repeated an earlier thread's stack pointer");
+				await Assert.That(report).Contains("--- thread os=");
+			}
+			finally
+			{
+				File.Delete(dumpPath);
+			}
+		}
+
+		/// <summary>
+		/// Every register slot inside the thread command at <paramref name="commandOffset"/> that holds the stack
+		/// pointer's value - found by value so the test does not restate the production code's register layout.
+		/// </summary>
+		/// <remarks>
+		/// All of them, not the first: another register can hold the same value (on ARM64 fp, before sp in the
+		/// state, often equals sp), and rewriting only that one left sp unchanged. Rewriting the extra copies is
+		/// harmless, as this thread's context is the one the repair drops.
+		/// </remarks>
+		private static List<long> StackPointerValuePositions(FileStream stream, long commandOffset, ulong stackPointer)
+		{
+			var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+			stream.Position = commandOffset + 4;
+			uint commandSize = reader.ReadUInt32();
+
+			var positions = new List<long>();
+			for (long position = commandOffset + 16; position + 8 <= commandOffset + commandSize; position += 8)
+			{
+				stream.Position = position;
+				if (reader.ReadUInt64() == stackPointer)
+				{
+					positions.Add(position);
+				}
+			}
+
+			if (positions.Count == 0)
+			{
+				throw new InvalidOperationException("stack pointer not found in its own thread command");
+			}
+
+			return positions;
 		}
 
 		/// <summary>

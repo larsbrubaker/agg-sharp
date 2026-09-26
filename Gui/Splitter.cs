@@ -214,7 +214,7 @@ namespace MatterHackers.Agg.UI
 				splitterBar.LocalBounds = new RectangleDouble(0, 0, Width, splitterBar.Height);
 
 				Panel1.OriginRelativeParent = new Vector2(0, SplitterDistance + splitterBar.Height);
-				Panel1.LocalBounds = new RectangleDouble(Panel1.Border.Left, Panel1.Border.Bottom, LocalBounds.Width - Panel1.DeviceMarginAndBorder.Width, LocalBounds.Height - SplitterDistance - splitterBar.Height - Panel1.DeviceMarginAndBorder.Height);
+				Panel1.LocalBounds = new RectangleDouble(Panel1.DeviceBorder.Left, Panel1.DeviceBorder.Bottom, LocalBounds.Width - Panel1.DeviceMarginAndBorder.Width, LocalBounds.Height - SplitterDistance - splitterBar.Height - Panel1.DeviceMarginAndBorder.Height);
 			}
 
 			base.OnBoundsChanged(e);
@@ -279,13 +279,13 @@ namespace MatterHackers.Agg.UI
 						double deltaX = mousePosition.X - DownPosition.X;
 						newSplitterPosition += deltaX;
 
-						if (newSplitterPosition < Parent.LocalBounds.Left + Parent.Padding.Left)
+						if (newSplitterPosition < Parent.LocalBounds.Left + Parent.DevicePadding.Left)
 						{
-							newSplitterPosition = Parent.LocalBounds.Left + Parent.Padding.Left;
+							newSplitterPosition = Parent.LocalBounds.Left + Parent.DevicePadding.Left;
 						}
-						else if (newSplitterPosition > Parent.LocalBounds.Right - Width - Parent.Padding.Right)
+						else if (newSplitterPosition > Parent.LocalBounds.Right - Width - Parent.DevicePadding.Right)
 						{
-							newSplitterPosition = Parent.LocalBounds.Right - Width - Parent.Padding.Right;
+							newSplitterPosition = Parent.LocalBounds.Right - Width - Parent.DevicePadding.Right;
 						}
 					}
 					else
@@ -293,13 +293,13 @@ namespace MatterHackers.Agg.UI
 						double deltaY = mousePosition.Y - DownPosition.Y;
 						newSplitterPosition += deltaY;
 
-						if (newSplitterPosition < Parent.LocalBounds.Bottom + Parent.Padding.Bottom)
+						if (newSplitterPosition < Parent.LocalBounds.Bottom + Parent.DevicePadding.Bottom)
 						{
-							newSplitterPosition = Parent.LocalBounds.Bottom + Parent.Padding.Bottom;
+							newSplitterPosition = Parent.LocalBounds.Bottom + Parent.DevicePadding.Bottom;
 						}
-						else if (newSplitterPosition > Parent.LocalBounds.Top - Height - Parent.Padding.Top)
+						else if (newSplitterPosition > Parent.LocalBounds.Top - Height - Parent.DevicePadding.Top)
 						{
-							newSplitterPosition = Parent.LocalBounds.Top - Height - Parent.Padding.Top;
+							newSplitterPosition = Parent.LocalBounds.Top - Height - Parent.DevicePadding.Top;
 						}
 					}
 

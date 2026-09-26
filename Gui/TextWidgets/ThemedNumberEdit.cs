@@ -67,7 +67,8 @@ namespace MatterHackers.Agg.UI
 
 					this.AddChild(labelWidget);
 
-					var labelWidth = labelWidget.Width + labelWidget.Margin.Left;
+					// the label's width is device pixels, so its margin is added in device pixels before converting
+					var labelWidth = labelWidget.Width + labelWidget.DeviceMargin.Left;
 					ActuallNumberEdit.Margin = ActuallNumberEdit.Margin.Clone(left: labelWidth / DeviceScale + 2);
 				}
 

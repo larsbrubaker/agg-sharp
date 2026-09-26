@@ -47,8 +47,8 @@ namespace MatterHackers.Agg.UI
 		{
 			get
 			{
-				Vector2 topLeftOffset = new Vector2(scrollArea.BoundsRelativeToParent.Left - LocalBounds.Left - ScrollArea.Margin.Left,
-					scrollArea.BoundsRelativeToParent.Top - LocalBounds.Top + ScrollArea.Margin.Top);
+				Vector2 topLeftOffset = new Vector2(scrollArea.BoundsRelativeToParent.Left - LocalBounds.Left - ScrollArea.DeviceMargin.Left,
+					scrollArea.BoundsRelativeToParent.Top - LocalBounds.Top + ScrollArea.DeviceMargin.Top);
 
 				return topLeftOffset;
 			}
@@ -209,9 +209,9 @@ namespace MatterHackers.Agg.UI
 		/// later Height assignment only moves Top, so that bottom stayed negative for good, and the scroll bar -
 		/// which is laid out at the local origin - was drawn a whole scroll offset clear of the view it scrolls.
 		/// The area's margin counts as content because that is how far the content is allowed to move. It is taken
-		/// from DeviceMarginAndBorder (device pixels) because bounds are in device pixels, while
-		/// <see cref="ScrollingArea.ValidateScrollPosition"/> and <see cref="RatioOfViewToContents0To1"/> work from
-		/// the design-unit Margin.
+		/// from DeviceMarginAndBorder (device pixels) because bounds are in device pixels, the same reason
+		/// <see cref="ScrollingArea.ValidateScrollPosition"/> and <see cref="RatioOfViewToContents0To1"/> use
+		/// DeviceMargin.
 		/// Background children (AddChildToBackground) are deliberately excluded from Fit sizing - they decorate the
 		/// view, they are not content to be enclosed.
 		/// </remarks>
@@ -345,7 +345,7 @@ namespace MatterHackers.Agg.UI
 		/// Measured exactly the way <see cref="ScrollingArea.ValidateScrollPosition"/> decides whether to clamp,
 		/// so "we can scroll" and "the scroll will be allowed to stand" can never disagree.
 		/// </remarks>
-		private bool HasHorizontalOverflow => ScrollArea.LocalBounds.Width + ScrollArea.Margin.Width > LocalBounds.Width;
+		private bool HasHorizontalOverflow => ScrollArea.LocalBounds.Width + ScrollArea.DeviceMargin.Width > LocalBounds.Width;
 
 		/// <summary>
 		/// True when the content is taller than the view, so a vertical scroll bar has somewhere to scroll to.
@@ -354,7 +354,7 @@ namespace MatterHackers.Agg.UI
 		/// Measured the way <see cref="HasHorizontalOverflow"/> is - the margin is part of how far the content is
 		/// allowed to move, so it counts as content the same way <see cref="RatioOfViewToContents0To1"/> counts it.
 		/// </remarks>
-		internal bool HasVerticalOverflow => ScrollArea.LocalBounds.Height + ScrollArea.Margin.Height > LocalBounds.Height;
+		internal bool HasVerticalOverflow => ScrollArea.LocalBounds.Height + ScrollArea.DeviceMargin.Height > LocalBounds.Height;
 
 		/// <summary>
 		/// What one pixel of <c>WheelDelta / 5</c> is worth, for both axes of <paramref name="mouseEvent"/>.
@@ -419,7 +419,7 @@ namespace MatterHackers.Agg.UI
 		{
 			Vector2 ratio = Vector2.Zero;
 			RectangleDouble boundsOfScrollableContents = ScrollArea.LocalBounds;
-			boundsOfScrollableContents.Inflate(ScrollArea.Margin); // expand it by margin as that is how much it is allowed to move
+			boundsOfScrollableContents.Inflate(ScrollArea.DeviceMargin); // expand it by margin as that is how much it is allowed to move
 
 			if (boundsOfScrollableContents.Width > 0)
 			{
@@ -460,7 +460,7 @@ namespace MatterHackers.Agg.UI
 			get
 			{
 				RectangleDouble boundsOfScrollableContents = ScrollArea.LocalBounds;
-				boundsOfScrollableContents.Inflate(ScrollArea.Margin); // expand it by margin as that is how much it is allowed to move
+				boundsOfScrollableContents.Inflate(ScrollArea.DeviceMargin); // expand it by margin as that is how much it is allowed to move
 
 				double maxYMovement = boundsOfScrollableContents.Height - Height;
 				double maxXMovement = Math.Max(0, boundsOfScrollableContents.Width - Width);
@@ -468,7 +468,7 @@ namespace MatterHackers.Agg.UI
 				double x0To1 = 0;
 				if (maxXMovement != 0)
 				{
-					x0To1 = 1 + (TopLeftOffset.X + ScrollArea.Margin.Left) / maxXMovement;
+					x0To1 = 1 + (TopLeftOffset.X + ScrollArea.DeviceMargin.Left) / maxXMovement;
 				}
 
 				double y0To1 = 0;
@@ -485,14 +485,14 @@ namespace MatterHackers.Agg.UI
 			set
 			{
 				RectangleDouble boundsOfScrollableContents = ScrollArea.LocalBounds;
-				boundsOfScrollableContents.Inflate(ScrollArea.Margin); // expand it by margin as that is how much it is allowed to move
+				boundsOfScrollableContents.Inflate(ScrollArea.DeviceMargin); // expand it by margin as that is how much it is allowed to move
 
 				double maxYMovement = boundsOfScrollableContents.Height - Height;
 				double maxXMovement = boundsOfScrollableContents.Width - Width;
 
 				Vector2 scrollRatio0To1 = value;
 				Vector2 newTopLeftOffset;
-				newTopLeftOffset.X = scrollRatio0To1.X * maxXMovement + ScrollArea.Margin.Left;
+				newTopLeftOffset.X = scrollRatio0To1.X * maxXMovement + ScrollArea.DeviceMargin.Left;
 				newTopLeftOffset.Y = -(scrollRatio0To1.Y - 1) * maxYMovement;
 
 				TopLeftOffset = newTopLeftOffset;
@@ -516,8 +516,10 @@ namespace MatterHackers.Agg.UI
 				{
 					if (scrollAmount == ScrollAmount.Center)
 					{
-						var widgetScrollBounds = this.TransformFromScreenSpace(screenBounds.Center);
-						this.ScrollPosition = new Vector2(0, -widgetScrollBounds.Y);
+						// Move the content by the distance from the widget's centre to this view's centre. Setting the
+						// scroll to minus the centre only worked out for a widget already near the view's bottom.
+						var scrollSpace = widget.TransformToParentSpace(this, widget.LocalBounds);
+						this.ScrollPosition = new Vector2(0, this.ScrollPosition.Y + this.LocalBounds.Center.Y - scrollSpace.Center.Y);
 					}
 					else
 					{

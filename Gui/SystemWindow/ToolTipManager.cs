@@ -47,6 +47,12 @@ namespace MatterHackers.Agg.UI
 		public const double InitialDelay = .6;
 
 		/// <summary>
+		/// How far, in design units, a shown tooltip's bottom sits above the mouse - a cursor's height, so the
+		/// tooltip is not drawn under the cursor.
+		/// </summary>
+		public const double CursorClearance = 23;
+
+		/// <summary>
 		/// Gets or sets the length of time that must transpire before subsequent ToolTip windows appear as the pointer moves from one control to another.
 		/// </summary>
 		public const double ReshowDelay = .2;
@@ -310,7 +316,7 @@ namespace MatterHackers.Agg.UI
 					// Lift the tooltip clear of the cursor. The cursor is drawn by the OS at the display's
 					// scale, so this clearance and the screen edge insets below are design pixels and have to
 					// be scaled - a raw 23 put the tooltip under a Retina cursor's tip.
-					double cursorClearance = 23 * GuiWidget.DeviceScale;
+					double cursorClearance = CursorClearance * GuiWidget.DeviceScale;
 					double edgeInset = 3 * GuiWidget.DeviceScale;
 
 					// Center on the widget, not on the mouse. A tooltip anchored at the cursor sits beside the

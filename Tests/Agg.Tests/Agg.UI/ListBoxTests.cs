@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2025, Lars Brubaker
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -190,6 +190,62 @@ namespace MatterHackers.Agg.UI.Tests
 
 			await Assert.That(listBox.Children.Contains(scrollArea)).IsFalse();
 			await Assert.That(scrollArea.Parent).IsNull();
+		}
+
+		/// <summary>
+		/// The item list is sized to the list box less the scroll area's padding, the list's own margin and the
+		/// scroll bar. The width is device pixels while <see cref="GuiWidget.Padding"/> and
+		/// <see cref="GuiWidget.Margin"/> are design units, so reading the plain ones left the list wider than the
+		/// list box by padding plus margin x (scale - 1) at 2x, running under the scroll bar.
+		/// </summary>
+		/// <remarks>
+		/// <see cref="GuiWidget.DeviceScale"/> is process wide, so this is keyless <c>[NotInParallel]</c> and
+		/// restores it in a finally.
+		/// </remarks>
+		[Test]
+		[NotInParallel]
+		[Arguments(1.0)]
+		[Arguments(2.0)]
+		public async Task ItemListFitsTheListBoxAtEveryDeviceScale(double scale)
+		{
+			double savedDeviceScale = GuiWidget.DeviceScale;
+			try
+			{
+				GuiWidget.DeviceScale = scale;
+
+				var listBox = new MarginedListBox();
+				listBox.VerticalScrollBar.Show = ScrollBar.ShowState.Always;
+				listBox.AddChild(new ListBoxTextItem("hand.stl", "c:\\development\\hand.stl"));
+				listBox.ScrollArea.Padding = new BorderDouble(4);
+				listBox.ItemList.Margin = new BorderDouble(6);
+
+				// the width is only worked out when the list box is sized
+				listBox.LocalBounds = new RectangleDouble(0, 0, 200 * scale, 300 * scale);
+
+				// laid out and drawn, the way a user sees it
+				var container = new GuiWidget(400 * scale, 400 * scale);
+				container.DoubleBuffer = true;
+				container.AddChild(listBox);
+				container.OnDraw(container.NewGraphics2D());
+
+				GuiWidget itemList = listBox.ItemList;
+				double expected = listBox.Width - listBox.ScrollArea.DevicePadding.Width - itemList.DeviceMargin.Width
+					- listBox.VerticalScrollBar.Width;
+				await Assert.That(itemList.Width).IsEqualTo(expected).Within(0.001)
+					.Because($"the list plus its padding, margin and the scroll bar is exactly the list box's {listBox.Width} wide at {scale}x");
+			}
+			finally
+			{
+				GuiWidget.DeviceScale = savedDeviceScale;
+			}
+		}
+
+		/// <summary>
+		/// Exposes the item list so a test can give it a margin and measure it.
+		/// </summary>
+		private class MarginedListBox : ListBox
+		{
+			public GuiWidget ItemList => topToBottomItemList;
 		}
 
 		private static void AddContents(GuiWidget widgetToAddItemsTo)

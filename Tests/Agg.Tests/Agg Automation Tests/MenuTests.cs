@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2025, Lars Brubaker
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -50,6 +50,22 @@ namespace MatterHackers.Agg.UI.Tests
 			}
 		}
 
+		/// <summary>
+		/// Returns once the input the runner has already sent, and everything its handlers queued in turn, has
+		/// run on the UI thread.
+		/// </summary>
+		/// <remarks>
+		/// Two drains, because a popup decides to close one idle pass late: <c>PopupWidget.OnMouseUp</c> and
+		/// <c>OnContainsFocusChanged</c> queue their close with <see cref="UiThread.RunOnIdle(System.Action)"/>
+		/// from inside the event. The first sentinel runs after the input events, so anything those queued sits
+		/// before the second. A fixed delay here raced that close on a loaded machine.
+		/// </remarks>
+		private static async Task WaitForInputToSettle(AutomationRunner testRunner)
+		{
+			await Assert.That(testRunner.WaitForPendingUiWork(5000)).IsTrue();
+			await Assert.That(testRunner.WaitForPendingUiWork(5000)).IsTrue();
+		}
+
         [Test]
         public async Task OpenAndCloseMenus()
 		{
@@ -74,7 +90,7 @@ namespace MatterHackers.Agg.UI.Tests
 				testRunner.ClickByName("menu1");
 				testRunner.ClickByName("item1");
 
-				testRunner.WaitFor(() => !testList.IsOpen, 2);
+				testRunner.WaitFor(() => !testList.IsOpen);
 				await Assert.That(!testList.IsOpen).IsTrue();
 				await Assert.That(item1ClickCount).IsEqualTo(1);
 				await Assert.That(item2ClickCount).IsEqualTo(0);
@@ -83,7 +99,7 @@ namespace MatterHackers.Agg.UI.Tests
 				testRunner.ClickByName("menu1");
 				testRunner.ClickByName("item2");
 
-				testRunner.WaitFor(() => !testList.IsOpen, 2);
+				testRunner.WaitFor(() => !testList.IsOpen);
 				await Assert.That(!testList.IsOpen).IsTrue();
 				await Assert.That(item1ClickCount).IsEqualTo(1);
 				await Assert.That(item2ClickCount).IsEqualTo(1);
@@ -92,14 +108,15 @@ namespace MatterHackers.Agg.UI.Tests
 				testRunner.ClickByName("menu1");
 				testRunner.ClickByName("item3");
 
-				testRunner.WaitFor(() => testList.IsOpen, 2);
+				// The menu was already open, so waiting for "open" would pass before the click was handled.
+				await WaitForInputToSettle(testRunner);
 				await Assert.That(testList.IsOpen).IsTrue();
 				await Assert.That(item1ClickCount).IsEqualTo(1);
 				await Assert.That(item2ClickCount).IsEqualTo(1);
 				await Assert.That(item3ClickCount).IsEqualTo(0);
 				testRunner.ClickByName("item2");
 
-				testRunner.WaitFor(() => !testList.IsOpen, 2);
+				testRunner.WaitFor(() => !testList.IsOpen);
 				await Assert.That(!testList.IsOpen).IsTrue();
 				await Assert.That(item1ClickCount).IsEqualTo(1);
 				await Assert.That(item2ClickCount).IsEqualTo(2);
@@ -108,31 +125,28 @@ namespace MatterHackers.Agg.UI.Tests
 				testRunner.ClickByName("menu1");
 				testRunner.ClickByName("OffMenu");
 
-				testRunner.WaitFor(() => !testList.IsOpen, 2);
+				testRunner.WaitFor(() => !testList.IsOpen);
 				//if (testList.IsOpen) { System.Diagnostics.Debugger.Launch(); System.Diagnostics.Debugger.Break(); }
 				await Assert.That(!testList.IsOpen).IsTrue();
 
 				testRunner.ClickByName("menu1");
-				testRunner.Delay(.1);
-				//testRunner.Delay(5);
-				//if (!testList.IsOpen) { System.Diagnostics.Debugger.Launch(); System.Diagnostics.Debugger.Break(); }
+				testRunner.WaitFor(() => testList.IsOpen);
 				await Assert.That(testList.IsOpen).IsTrue();
 
+				// Clicking the disabled item must leave the menu open. "Still open" is only evidence once the
+				// click has been fully handled, so wait for that rather than for time.
 				testRunner.ClickByName("item3");
-				testRunner.Delay(.1);
-				//if (!testList.IsOpen) { System.Diagnostics.Debugger.Launch(); System.Diagnostics.Debugger.Break(); }
+				await WaitForInputToSettle(testRunner);
 				await Assert.That(testList.IsOpen).IsTrue();
+				await Assert.That(item3ClickCount).IsEqualTo(0);
 
-				//testRunner.Delay(5);
+				// Hovering off the menu is not a click and must not close it either.
 				testRunner.MoveToByName("OffMenu");
-				// NOTE: Sometimes get failures here. Using a large delay now.
-				// NOTE: The menu was once closed for those 10s...
-				// Update: Failures may have been due to tests fighting over platform UI focus.
-				//if (!testList.IsOpen) { System.Diagnostics.Debugger.Launch(); System.Diagnostics.Debugger.Break(); }
+				await WaitForInputToSettle(testRunner);
 				await Assert.That(testList.IsOpen).IsTrue();
 
 				testRunner.ClickByName("OffMenu");
-				testRunner.WaitFor(() => !testList.IsOpen, 2);
+				testRunner.WaitFor(() => !testList.IsOpen);
 				await Assert.That(testList.IsOpen).IsFalse();
 				testRunner.MarkTestComplete();
 			};

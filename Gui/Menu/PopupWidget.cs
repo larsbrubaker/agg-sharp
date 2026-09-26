@@ -491,12 +491,15 @@ namespace MatterHackers.Agg.UI
 
 				Vector2 bottomLeftScreenSpace;
 
-				// Calculate left aligned screen space position (using widgetRelativeTo.parent)
-				Vector2 alignLeftPosition = widgetRelativeTo.Parent.TransformToScreenSpace(widgetRelativeTo.Position);
+				// The anchor as it is drawn in the window. Its width and height are read through the same
+				// transforms as its corner - under a zoomed parent (a node editor) the local ones are off by the
+				// zoom, which right aligned and upward lists used to add to the drawn corner. Its LocalBounds, not
+				// its origin, as in PopupPlacement.BestPopupPosition: an anchor whose bounds do not start at 0, 0
+				// (a text widget's descent) is drawn from its LocalBounds corner.
+				var drawnAnchor = widgetRelativeTo.TransformToParentSpace(windowToAddTo, widgetRelativeTo.LocalBounds);
 
-				// Calculate right aligned screen space position (using widgetRelativeTo.parent)
-				var bottomLeftForAlignRight = widgetRelativeTo.Position - new Vector2(popupWidget.Width - widgetRelativeTo.LocalBounds.Width, 0);
-				Vector2 alignRightPosition = widgetRelativeTo.Parent.TransformToScreenSpace(bottomLeftForAlignRight);
+				Vector2 alignLeftPosition = new Vector2(drawnAnchor.Left, drawnAnchor.Bottom);
+				Vector2 alignRightPosition = new Vector2(drawnAnchor.Right - popupWidget.Width, drawnAnchor.Bottom);
 
 				// Conditionally select appropriate left/right position
 				if (alignToRightEdge
@@ -525,7 +528,7 @@ namespace MatterHackers.Agg.UI
 				// one ran off the window. Re-checking also catches a menu filled after it was shown and a
 				// window resized under an open one.
 				var spaceBelow = bottomLeftScreenSpace.Y;
-				var spaceAbove = windowToAddTo.Height - (bottomLeftScreenSpace.Y + widgetRelativeTo.Height);
+				var spaceAbove = windowToAddTo.Height - (bottomLeftScreenSpace.Y + drawnAnchor.Height);
 
 				// What the popup would be if it were not already clamped - our own height is the last
 				// clamp, and measuring that would say we fit no matter how little room is left
@@ -562,7 +565,7 @@ namespace MatterHackers.Agg.UI
 						break;
 
 					case Direction.Up:
-						popupWidget.Position = bottomLeftScreenSpace + new Vector2(0, widgetRelativeTo.Height);
+						popupWidget.Position = bottomLeftScreenSpace + new Vector2(0, drawnAnchor.Height);
 						break;
 
 					default:

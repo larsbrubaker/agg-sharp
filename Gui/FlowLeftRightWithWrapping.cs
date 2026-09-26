@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2025, Lars Brubaker
+Copyright (c) 2026, Lars Brubaker
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -112,8 +112,27 @@ namespace MatterHackers.Agg.UI
 
 			if (Parent != null)
 			{
-				Parent.BoundsChanged += Parent_BoundsChanged;
 				// Make sure we always do a layout regardless of having a layout event or a draw.
+				DoWrappingLayout();
+			}
+		}
+
+		/// <summary>
+		/// Wraps again whenever this flow's own width changes. The parent stretches the flow after its own
+		/// bounds change and after the flow is parented, so wrapping on those events read a stale width.
+		/// </summary>
+		public override void OnBoundsChanged(EventArgs e)
+		{
+			base.OnBoundsChanged(e);
+
+			// The first stretch usually lands while a wrap settles (its height change lays out the parent),
+			// so a wrap may start one more against the width it was just given. A flow whose width fits its
+			// content could keep changing width that way, so nesting stops after one re-wrap.
+			if (!doingLayout
+				&& nestedWraps < 2
+				&& Parent != null
+				&& Width != wrappedWidth)
+			{
 				DoWrappingLayout();
 			}
 		}
@@ -124,22 +143,12 @@ namespace MatterHackers.Agg.UI
 		}
 
 		bool doingLayout = false;
-		double oldWidth = 0;
 
-		private void Parent_BoundsChanged(object sender, EventArgs e)
-		{
-			var parent = Parent;
-			if (parent != null
-				&& parent.Width != oldWidth)
-			{
-				if (!doingLayout)
-				{
-					DoWrappingLayout();
-				}
+		// how many wraps are running, one inside another's settle
+		private int nestedWraps;
 
-				oldWidth = parent.Width;
-			}
-		}
+		// the width the rows were last wrapped against
+		private double wrappedWidth = double.NaN;
 
         public void AddText(string text, Color textColor, int pointSize)
         {
@@ -207,6 +216,7 @@ namespace MatterHackers.Agg.UI
 			using (this.LayoutLock())
 			{
 				doingLayout = true;
+				wrappedWidth = Width;
 				// remove all the children we added
 				foreach (var child in addedChildren)
 				{
@@ -223,15 +233,10 @@ namespace MatterHackers.Agg.UI
 				// close all the row containers
 				this.CloseChildren();
 
-				// add in new row container
-				FlowLayoutWidget childContainerRow = new FlowLayoutWidget()
-				{
-					Margin = RowMargin,
-					Padding = RowPadding,
-					HAnchor = HAnchor.Stretch,
-				};
+				// add in new row container; the first row has no RowBorder, so a top-only border separates rows
+				FlowLayoutWidget childContainerRow = NewRow();
 				base.AddChild(childContainerRow);
-				var rowPaddingWidth = RowPadding.Width + RowMargin.Width + this.Margin.Width + this.Padding.Width;
+				var rowPaddingWidth = RowChromeWidth(childContainerRow);
 
 				double runningSize = 0;
 				MaxLineWidth = 0;
@@ -260,14 +265,9 @@ namespace MatterHackers.Agg.UI
 							}
 						}
 
-						childContainerRow = new FlowLayoutWidget()
-						{
-							Margin = RowMargin,
-							Padding = RowPadding,
-							HAnchor = HAnchor.Stretch,
-							Border = RowBorder,
-							BorderColor = RowBorderColor,
-						};
+						childContainerRow = NewRow();
+						childContainerRow.Border = RowBorder;
+						childContainerRow.BorderColor = RowBorderColor;
 
 						if (lastItemWasHorizontalSpacer)
 						{
@@ -275,6 +275,7 @@ namespace MatterHackers.Agg.UI
 						}
 
 						base.AddChild(childContainerRow);
+						rowPaddingWidth = RowChromeWidth(childContainerRow);
 					}
 
 					if (runningSize > 0
@@ -308,10 +309,37 @@ namespace MatterHackers.Agg.UI
 				needAnotherLayout = false;
 			}
 
-			// change the size to force a recursive layout event
-			this.Height--;
-			this.Height++;
-			this.PerformLayout();
+			nestedWraps++;
+			try
+			{
+				// change the size to force a recursive layout event
+				this.Height--;
+				this.Height++;
+				this.PerformLayout();
+			}
+			finally
+			{
+				nestedWraps--;
+			}
+		}
+
+		private FlowLayoutWidget NewRow()
+		{
+			return new FlowLayoutWidget()
+			{
+				Margin = RowMargin,
+				Padding = RowPadding,
+				HAnchor = HAnchor.Stretch,
+			};
+		}
+
+		/// <summary>
+		/// The device-pixel width a row's items cannot use: the row's margin, border and padding and this flow's
+		/// padding. This flow's margin is outside its <see cref="GuiWidget.Width"/>, so it takes nothing.
+		/// </summary>
+		private double RowChromeWidth(GuiWidget row)
+		{
+			return row.DeviceMarginAndBorder.Width + row.DevicePadding.Width + this.DevicePadding.Width;
 		}
 
         private void MakeProportionalIfRequired()
@@ -322,7 +350,7 @@ namespace MatterHackers.Agg.UI
 				{
 					row.PerformLayout();
 					var rowChildrenCount = row.Children.Count;
-					var extraWidth = this.Width - row.GetChildrenBoundsIncludingMargins().Width - row.Padding.Width - row.Margin.Width;
+					var extraWidth = this.Width - row.GetChildrenBoundsIncludingMargins().Width - RowChromeWidth(row);
 					if (extraWidth > rowChildrenCount)
 					{
 						// distribute the extra width between each child
@@ -351,13 +379,13 @@ namespace MatterHackers.Agg.UI
 				{
 					row.PerformLayout();
 					var rowChildrenCount = row.Children.Count;
-					var extraWidth = this.Width - row.GetChildrenBoundsIncludingMargins().Width - row.Padding.Width - row.Margin.Width;
+					var extraWidth = this.Width - row.GetChildrenBoundsIncludingMargins().Width - RowChromeWidth(row);
 					if (extraWidth > rowChildrenCount)
 					{
 						using (row.LayoutLock())
 						{
 							var leadingSpace = (contentHAnchor & HAnchor.Right) == HAnchor.Right
-								? Math.Max(0, extraWidth - row.Padding.Width)
+								? extraWidth
 								: extraWidth / 2;
 							row.AddChild(new GuiWidget(leadingSpace, 2), 0);
 						}

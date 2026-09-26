@@ -192,7 +192,9 @@ namespace MatterHackers.Agg.UI
 					settingLocalBounds = true;
 					if (topToBottomItemList != null)
 					{
-						topToBottomItemList.Width = Math.Max(0, value.Width - ScrollArea.Padding.Width - topToBottomItemList.Margin.Width - VerticalScrollBar.Width);
+						// value is device pixels, so take the device padding and margin; the design-unit ones left the
+						// list too wide by padding plus margin x (DeviceScale - 1)
+						topToBottomItemList.Width = Math.Max(0, value.Width - ScrollArea.DevicePadding.Width - topToBottomItemList.DeviceMargin.Width - VerticalScrollBar.Width);
 					}
 
 					base.LocalBounds = value;

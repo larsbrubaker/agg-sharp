@@ -129,7 +129,7 @@ namespace MatterHackers.Agg.UI.Tests
 			// the content's right edge has come in to the view's, and no further
 			await Assert.That(atTheEnd).IsLessThan(0);
 			await Assert.That(scrollable.ScrollArea.BoundsRelativeToParent.Right)
-				.IsGreaterThanOrEqualTo(scrollable.LocalBounds.Right - scrollable.ScrollArea.Margin.Right - 0.001);
+				.IsGreaterThanOrEqualTo(scrollable.LocalBounds.Right - scrollable.ScrollArea.DeviceMargin.Right - 0.001);
 
 			// and having run out, the gesture is left for an ancestor rather than swallowed
 			var pastTheEnd = SidewaysScroll(-100000);

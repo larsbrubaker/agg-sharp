@@ -151,19 +151,22 @@ namespace MatterHackers.Agg.UI
 			get => base.LocalBounds;
 			set
 			{
-				if (value != LocalBounds)
+				if (AutoExpandBoundsToText)
 				{
-					if (AutoExpandBoundsToText)
+					// An auto-expanding text sizes itself to its text plus padding whatever bounds are asked for, so
+					// this runs even when value equals the current bounds - the Padding setter re-applies with
+					// LocalBounds = LocalBounds. Bounds are device pixels, so the padding is the device one.
+					RectangleDouble textBoundsWithPadding = Printer.LocalBounds;
+					textBoundsWithPadding.Inflate(DevicePadding);
+					MinimumSize = new Vector2(textBoundsWithPadding.Width, textBoundsWithPadding.Height);
+					if (textBoundsWithPadding != LocalBounds)
 					{
-						RectangleDouble textBoundsWithPadding = Printer.LocalBounds;
-						textBoundsWithPadding.Inflate(Padding);
-						MinimumSize = new Vector2(textBoundsWithPadding.Width, textBoundsWithPadding.Height);
 						base.LocalBounds = textBoundsWithPadding;
 					}
-					else
-					{
-						base.LocalBounds = value;
-					}
+				}
+				else if (value != LocalBounds)
+				{
+					base.LocalBounds = value;
 				}
 			}
 		}

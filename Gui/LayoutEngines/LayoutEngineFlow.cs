@@ -42,6 +42,10 @@ namespace MatterHackers.Agg.UI
 
 	public class LayoutEngineFlow : LayoutEngineSimpleAlign
 	{
+		// how many times one layout re-lays its children after a fit changed the size; a widget whose children
+		// change with every size it is given would otherwise lay out forever
+		private const int MaxFitPasses = 4;
+
 		public FlowDirection FlowDirection { get; set; }
 
 		public LayoutEngineFlow(FlowDirection flowDirection)
@@ -79,14 +83,25 @@ namespace MatterHackers.Agg.UI
 
 					DoLayoutChildren(layoutEventArgs);
 
-					FixOriginXIfRightToLeft(parent);
-					FixOriginYIfTopToBottom(parent);
-
-					bool parentChangedSize = false;
-					DoFitToChildrenHorizontal(parent, ref parentChangedSize);
-					DoFitToChildrenVertical(parent, ref parentChangedSize);
-					if (parentChangedSize)
+					// Fitting can change what the children are: a wrapping flow narrowed by its parent when it grows
+					// taller re-wraps into more rows inside the fit, while this layout holds it locked. The re-laid
+					// children then run from the new top down past the origin, so the origin fix and the fit run again
+					// on them until the size holds; a fit that changes the size once too often still leaves bounds
+					// that enclose the children as they are.
+					for (int pass = 0; ; pass++)
 					{
+						FixOriginXIfRightToLeft(parent);
+						FixOriginYIfTopToBottom(parent);
+
+						bool parentChangedSize = false;
+						DoFitToChildrenHorizontal(parent, ref parentChangedSize);
+						DoFitToChildrenVertical(parent, ref parentChangedSize);
+						if (!parentChangedSize
+							|| pass == MaxFitPasses)
+						{
+							break;
+						}
+
 						foreach (GuiWidget child in parent.Children)
 						{
 							if (parent.HasBeenClosed)
@@ -338,7 +353,9 @@ namespace MatterHackers.Agg.UI
 			{
 				case FlowDirection.LeftToRight:
 					{
-						double curX = parent.DevicePadding.Left;
+						// from the drawn left edge, like RightToLeft and TopToBottom: an empty Fit widget given padding
+						// takes bounds reaching one padding left of its origin and keeps them once stretched
+						double curX = parent.LocalBounds.Left + parent.DevicePadding.Left;
 						foreach (GuiWidget child in parent.Children)
 						{
 							if (parent.HasBeenClosed)
@@ -398,7 +415,8 @@ namespace MatterHackers.Agg.UI
 
 				case FlowDirection.BottomToTop:
 					{
-						double curY = parent.DevicePadding.Bottom;
+						// from the drawn bottom edge, for the same reason as LeftToRight
+						double curY = parent.LocalBounds.Bottom + parent.DevicePadding.Bottom;
 						foreach (GuiWidget child in parent.Children)
 						{
 							if (parent.HasBeenClosed)

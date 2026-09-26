@@ -186,6 +186,56 @@ namespace MatterHackers.Agg.UI.Tests
 		}
 
 		/// <summary>
+		/// A window inside a zoomed, offset container (the geometry-node editor's graph) is sized in the
+		/// container's units, so a handle drag has to be measured in those units: the dragged edge has to stay
+		/// under the mouse on screen, not grow by the mouse travel times the zoom.
+		/// </summary>
+		[Test]
+		[Arguments(0.5, HAnchor.Right)]
+		[Arguments(1.5, HAnchor.Right)]
+		[Arguments(0.5, HAnchor.Left)]
+		[Arguments(1.5, HAnchor.Left)]
+		public async Task AnEdgeDragInAZoomedContainerKeepsTheEdgeUnderTheMouse(double zoom, HAnchor edge)
+		{
+			var systemWindow = new SystemWindow(1200, 900);
+			var container = new GuiWidget(1200, 900);
+			systemWindow.AddChild(container);
+			var zoomed = new GuiWidget(1200, 900)
+			{
+				ParentToChildTransform = Transform.Affine.NewScaling(zoom) * Transform.Affine.NewTranslation(40, 30),
+			};
+			container.AddChild(zoomed);
+
+			var window = new WindowWidget(new ThemeConfig(), new RectangleDouble(100, 100, 400, 400));
+			zoomed.AddChild(window);
+			systemWindow.PerformLayout();
+
+			var grab = window.Children.OfType<GrabControl>()
+				.First(control => control.HAnchor == edge && control.VAnchor == VAnchor.Stretch);
+			double EdgeOnScreen() => window.TransformToScreenSpace(new Vector2(edge == HAnchor.Right ? window.Width : 0, 0)).X;
+			double OtherEdgeOnScreen() => window.TransformToScreenSpace(new Vector2(edge == HAnchor.Right ? 0 : window.Width, 0)).X;
+
+			var startEdge = EdgeOnScreen();
+			var startOtherEdge = OtherEdgeOnScreen();
+			var mouse = grab.TransformToScreenSpace(new Vector2(grab.Width / 2, grab.Height / 2));
+			systemWindow.OnMouseDown(new MouseEventArgs(MouseButtons.Left, 1, mouse.X, mouse.Y, 0));
+			// outward, so the minimum size cannot stop the edge
+			var step = new Vector2(edge == HAnchor.Right ? StepSize : -StepSize, 0);
+			for (int i = 0; i < StepCount; i++)
+			{
+				mouse += step;
+				systemWindow.OnMouseMove(new MouseEventArgs(MouseButtons.Left, 0, mouse.X, mouse.Y, 0));
+			}
+			systemWindow.OnMouseUp(new MouseEventArgs(MouseButtons.Left, 0, mouse.X, mouse.Y, 0));
+
+			var moved = EdgeOnScreen() - startEdge;
+			await Assert.That(moved).IsEqualTo(step.X * StepCount).Within(0.5)
+				.Because($"at zoom {zoom} the {edge} edge has to follow the mouse {step.X * StepCount} px on screen, it moved {moved}");
+			await Assert.That(OtherEdgeOnScreen()).IsEqualTo(startOtherEdge).Within(0.5)
+				.Because($"at zoom {zoom} the edge that is not dragged must stay put");
+		}
+
+		/// <summary>
 		/// Builds a window on a system window and presses the middle of the grab handle with the given
 		/// anchors, returning the screen space position the mouse was pressed at.
 		/// </summary>

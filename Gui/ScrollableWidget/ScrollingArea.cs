@@ -143,6 +143,13 @@ namespace MatterHackers.Agg.UI
 
 		private int debugRecursionCount = 0;
 
+		/// <summary>
+		/// Keeps the content from scrolling further than its margin past either edge of the view.
+		/// </summary>
+		/// <remarks>
+		/// Every bound here is in device pixels, so the margin and padding are the device ones: the design-unit
+		/// Margin and Padding put the stop margin x (scale - 1) away from the gap layout draws at 2x.
+		/// </remarks>
 		internal void ValidateScrollPosition()
 		{
 			var parent = this.Parent;
@@ -156,7 +163,7 @@ namespace MatterHackers.Agg.UI
 			Vector2 topLeftOffset = parentScrollableWidget.TopLeftOffset;
 
 			RectangleDouble boundsWithMargin = LocalBounds;
-			boundsWithMargin.Inflate(Margin);
+			boundsWithMargin.Inflate(DeviceMargin);
 			if (boundsWithMargin.Height < parentScrollableWidget.LocalBounds.Height)
 			{
 				debugRecursionCount++;
@@ -170,28 +177,28 @@ namespace MatterHackers.Agg.UI
 			}
 			else
 			{
-				if (newOrigin.Y + Margin.Top + Padding.Top + LocalBounds.Top < parent.LocalBounds.Top)
+				if (newOrigin.Y + DeviceMargin.Top + DevicePadding.Top + LocalBounds.Top < parent.LocalBounds.Top)
 				{
-					newOrigin.Y = parent.LocalBounds.Top - Margin.Top - Padding.Top - LocalBounds.Top;
+					newOrigin.Y = parent.LocalBounds.Top - DeviceMargin.Top - DevicePadding.Top - LocalBounds.Top;
 				}
-				else if (LocalBounds.Height + Margin.Height >= parent.LocalBounds.Height)
+				else if (LocalBounds.Height + DeviceMargin.Height >= parent.LocalBounds.Height)
 				{
-					if (BoundsRelativeToParent.Bottom - Margin.Bottom > parent.LocalBounds.Bottom)
+					if (BoundsRelativeToParent.Bottom - DeviceMargin.Bottom > parent.LocalBounds.Bottom)
 					{
-						newOrigin.Y = parent.LocalBounds.Bottom - LocalBounds.Bottom + Margin.Bottom;
+						newOrigin.Y = parent.LocalBounds.Bottom - LocalBounds.Bottom + DeviceMargin.Bottom;
 					}
 				}
 			}
 
-			if (BoundsRelativeToParent.Left - Margin.Left > parent.LocalBounds.Left)
+			if (BoundsRelativeToParent.Left - DeviceMargin.Left > parent.LocalBounds.Left)
 			{
-				newOrigin.X = parent.LocalBounds.Left - LocalBounds.Left + Margin.Left;
+				newOrigin.X = parent.LocalBounds.Left - LocalBounds.Left + DeviceMargin.Left;
 			}
-			else if (LocalBounds.Width + Margin.Width > parent.LocalBounds.Width)
+			else if (LocalBounds.Width + DeviceMargin.Width > parent.LocalBounds.Width)
 			{
-				if (BoundsRelativeToParent.Right + Margin.Right < parent.LocalBounds.Right)
+				if (BoundsRelativeToParent.Right + DeviceMargin.Right < parent.LocalBounds.Right)
 				{
-					newOrigin.X = parent.LocalBounds.Right - LocalBounds.Right - Margin.Right;
+					newOrigin.X = parent.LocalBounds.Right - LocalBounds.Right - DeviceMargin.Right;
 				}
 			}
 

@@ -268,13 +268,20 @@ namespace MatterHackers.Agg.UI
 
 		private static void BestPopupPosition(this SystemWindow systemWindow, MatePoint anchor, MatePoint popup, RectangleDouble altBounds)
 		{
-			// Calculate left aligned screen space position (using widgetRelativeTo.parent)
-			Vector2 anchorLeft = anchor.Widget.Parent.TransformToParentSpace(systemWindow, anchor.Widget.Position);
-			anchorLeft += new Vector2(altBounds.Left, altBounds.Bottom);
+			// The rectangle the popup mates to - the anchor, or altBounds (a click point, say) in the anchor's
+			// coordinates - read as it is drawn in the window. The mates below add its width and height to its
+			// corner, so both have to come through the same transform: mapping only the corner and adding the
+			// anchor's own widths put a popup opened inside a zoomed node editor off by the zoom.
+			// The anchor's own LocalBounds, not its origin: a widget whose bounds do not start at 0, 0 (a text
+			// button) is drawn from its LocalBounds corner, and mating to its origin put the popup beside it.
+			var localBounds = altBounds == default(RectangleDouble) ? anchor.Widget.LocalBounds : altBounds;
+			var drawnBounds = anchor.Widget.TransformToParentSpace(systemWindow, localBounds);
+
+			Vector2 anchorLeft = new Vector2(drawnBounds.Left, drawnBounds.Bottom);
 
 			Vector2 popupPosition = anchorLeft;
 
-			var bounds = altBounds == default(RectangleDouble) ? anchor.Widget.LocalBounds : altBounds;
+			var bounds = new RectangleDouble(0, 0, drawnBounds.Width, drawnBounds.Height);
 
 			Vector2 xPosition = PopupMenu.GetXAnchor(anchor.Mate, popup.Mate, popup.Widget, bounds);
 

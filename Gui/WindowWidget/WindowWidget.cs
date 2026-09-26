@@ -232,7 +232,7 @@ namespace MatterHackers.Agg.UI
 		/// </summary>
 		/// <remarks>
 		/// Every handler places the window absolutely - the size and position the window had when the drag
-		/// started, plus how far the mouse has moved since, in screen space. Nothing is accumulated from the
+		/// started, plus how far the mouse has moved since, in the window's parent's units (see GrabControl.DragDelta). Nothing is accumulated from the
 		/// previous move, because the handle is anchored to the edge it drags: it slides out from under the
 		/// mouse on every resize, so a delta measured in its own coordinates is measured against a moving
 		/// reference frame. Position is always derived from the size the window actually took, so the minimum
