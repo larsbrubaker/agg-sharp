@@ -1953,7 +1953,7 @@ namespace MatterHackers.Agg.UI
 			var threadSafeParent = Parent;
 			if (threadSafeParent != null && threadSafeParent.Visible)
 			{
-				rectToInvalidate.Offset(OriginRelativeParent);
+				rectToInvalidate = BoundsInParent(rectToInvalidate);
 
 				// This code may be a good idea but it needs to be tested to make sure there are no subtle consequences
 				if (rectToInvalidate.Width > 0 && rectToInvalidate.Height > 0
@@ -2086,7 +2086,7 @@ namespace MatterHackers.Agg.UI
 				if (parent != null)
 				{
 					// offset our bounds to the parent bounds
-					visibleBounds.Offset(curGUIWidget.OriginRelativeParent.X, curGUIWidget.OriginRelativeParent.Y);
+					visibleBounds = curGUIWidget.BoundsInParent(visibleBounds);
 					visibleBounds.IntersectWithRectangle(parent.LocalBounds);
 				}
 
@@ -2094,6 +2094,80 @@ namespace MatterHackers.Agg.UI
 			}
 
 			return true;
+		}
+
+		/// <summary>
+		/// A rectangle in this widget's own coordinates, as the axis-aligned bounds it covers in its parent's.
+		/// </summary>
+		/// <remarks>
+		/// Every clip, hit test and invalidation walking up the tree goes through this rather than offsetting by
+		/// <see cref="OriginRelativeParent"/>: that is only the translation of <see cref="ParentToChildTransform"/>,
+		/// so under a parent that scales its children (a zoomable canvas) a widget was judged where it would sit
+		/// at full size - a visible one became unclickable and a clipped-off one stayed clickable.
+		/// </remarks>
+		public RectangleDouble BoundsInParent(RectangleDouble localRectangle)
+		{
+			return TransformedBounds(ParentToChildTransform, localRectangle);
+		}
+
+		/// <summary>
+		/// The axis-aligned bounds of <paramref name="rectangle"/> mapped through <paramref name="transform"/>.
+		/// </summary>
+		/// <remarks>
+		/// An inverted rectangle (Left past Right or Bottom past Top) means "nothing" to the walks that call this -
+		/// FindDescendants narrows its region that way and Invalidate is handed
+		/// <see cref="RectangleDouble.ZeroIntersection"/> - so it has to come out inverted too. The scale-and-translate
+		/// case therefore swaps an axis's edges only when that axis's scale flips it, which also keeps pure
+		/// translation exactly the old <c>x + tx</c> offset; the rotated or sheared case returns an empty input as
+		/// <see cref="RectangleDouble.ZeroIntersection"/>, since a corner walk would rebuild it as a valid rectangle.
+		/// </remarks>
+		private static RectangleDouble TransformedBounds(Affine transform, RectangleDouble rectangle)
+		{
+			if (transform.shx == 0 && transform.shy == 0)
+			{
+				double left = rectangle.Left * transform.sx + transform.tx;
+				double right = rectangle.Right * transform.sx + transform.tx;
+				if (transform.sx < 0)
+				{
+					(left, right) = (right, left);
+				}
+
+				double bottom = rectangle.Bottom * transform.sy + transform.ty;
+				double top = rectangle.Top * transform.sy + transform.ty;
+				if (transform.sy < 0)
+				{
+					(bottom, top) = (top, bottom);
+				}
+
+				return new RectangleDouble(left, bottom, right, top);
+			}
+
+			if (rectangle.Left > rectangle.Right || rectangle.Bottom > rectangle.Top)
+			{
+				return RectangleDouble.ZeroIntersection;
+			}
+
+			var bounds = RectangleDouble.ZeroIntersection;
+			ExpandToIncludeTransformedCorner(ref bounds, transform, rectangle.Left, rectangle.Bottom);
+			ExpandToIncludeTransformedCorner(ref bounds, transform, rectangle.Right, rectangle.Bottom);
+			ExpandToIncludeTransformedCorner(ref bounds, transform, rectangle.Right, rectangle.Top);
+			ExpandToIncludeTransformedCorner(ref bounds, transform, rectangle.Left, rectangle.Top);
+
+			return bounds;
+		}
+
+		/// <remarks>
+		/// An unbounded search rectangle (double.MinValue to double.MaxValue) becomes infinite under a shrinking
+		/// ancestor, and in IEEE infinity times a zero matrix term is NaN - under a shear every corner loses that
+		/// axis and the search finds nothing. A zero term contributes nothing, so it is skipped. The only NaN left is
+		/// infinity minus infinity at a corner with both coordinates infinite; ExpandToInclude ignores a NaN
+		/// coordinate, and the opposite corner already carries that axis out to infinity.
+		/// </remarks>
+		private static void ExpandToIncludeTransformedCorner(ref RectangleDouble bounds, Affine transform, double x, double y)
+		{
+			double transformedX = (transform.sx == 0 ? 0 : x * transform.sx) + (transform.shx == 0 ? 0 : y * transform.shx) + transform.tx;
+			double transformedY = (transform.shy == 0 ? 0 : x * transform.shy) + (transform.sy == 0 ? 0 : y * transform.sy) + transform.ty;
+			bounds.ExpandToInclude(transformedX, transformedY);
 		}
 
 		public bool ActuallyVisibleOnParent()
@@ -2111,7 +2185,7 @@ namespace MatterHackers.Agg.UI
 			if (parent != null)
 			{
 				// offset our bounds to the parent bounds
-				visibleBounds.Offset(this.OriginRelativeParent.X, this.OriginRelativeParent.Y);
+				visibleBounds = this.BoundsInParent(visibleBounds);
 				visibleBounds.IntersectWithRectangle(parent.LocalBounds);
 			}
 
@@ -2140,7 +2214,7 @@ namespace MatterHackers.Agg.UI
 				if (curGUIWidget.Parent != null)
 				{
 					// offset our bounds to the parent bounds
-					clippedBounds.Offset(curGUIWidget.OriginRelativeParent.X, curGUIWidget.OriginRelativeParent.Y);
+					clippedBounds = curGUIWidget.BoundsInParent(clippedBounds);
 					clippedBounds.IntersectWithRectangle(curGUIWidget.Parent.LocalBounds);
 				}
 
@@ -2172,7 +2246,7 @@ namespace MatterHackers.Agg.UI
 				if (curGUIWidget.Parent != null)
 				{
 					// offset our bounds to the parent bounds
-					visibleBounds.Offset(curGUIWidget.OriginRelativeParent.X, curGUIWidget.OriginRelativeParent.Y);
+					visibleBounds = curGUIWidget.BoundsInParent(visibleBounds);
 					visibleBounds.IntersectWithRectangle(curGUIWidget.Parent.LocalBounds);
 				}
 
@@ -4062,7 +4136,9 @@ namespace MatterHackers.Agg.UI
 			foreach (GuiWidget child in searchChildren.Where(child => allowDisabledOrHidden || (child.Visible && child.Enabled)))
 			{
 				RectangleDouble touchingBoundsRelChild = touchingBounds;
-				touchingBoundsRelChild.Offset(-child.OriginRelativeParent);
+				var parentToChild = child.ParentToChildTransform;
+				parentToChild.invert();
+				touchingBoundsRelChild = TransformedBounds(parentToChild, touchingBoundsRelChild);
 				child.FindDescendants(widgetNames, foundChildren, touchingBoundsRelChild, searchType, allowDisabledOrHidden);
 			}
 
