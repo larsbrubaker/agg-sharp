@@ -1125,7 +1125,7 @@ namespace MatterHackers.PolygonMesh.Csg
 		/// for a part at the origin and the same part moved across the bed - closes those seams
 		/// without moving anything a user could see. Only ever called on the failure path, so a good mesh pays nothing for it.
 		/// </remarks>
-		private static Mesh WeldSeams(Mesh mesh)
+		internal static Mesh WeldSeams(Mesh mesh)
 		{
 			var aabb = mesh.GetAxisAlignedBoundingBox();
 			var diagonal = aabb.Size.Length;

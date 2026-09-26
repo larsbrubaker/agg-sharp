@@ -358,11 +358,13 @@ namespace MatterHackers.PolygonMesh.Csg
 		/// Imports both operands, runs the kernel's Minkowski and reads the result back.
 		/// </summary>
 		/// <remarks>
-		/// The import is <see cref="ManifoldKernel.Import"/> - the same one a boolean operand goes
-		/// through, weld retry included - so a mesh usable as a boolean operand is usable here and
-		/// one that is not fails the same way, with the same message. No orientation repair: a
-		/// caller that wants it can hand in a repaired mesh, and doing it silently here would make
-		/// the two entry points disagree about what an inside-out shell means.
+		/// The import is <see cref="ImportOperand"/>: the boolean operand import, weld retry included,
+		/// plus one more retry that rewinds a backward patch. So every mesh usable as a boolean operand
+		/// is usable here, and so is a closed surface with triangles wound against their neighbours,
+		/// which a boolean refuses as NotClosed. Anything else fails the same way a boolean does, with
+		/// the same message. No shell orientation repair: a whole shell wound inside out stays what it
+		/// is, since doing that silently here would make the two entry points disagree about what an
+		/// inside-out shell means.
 		/// </remarks>
 		private static (Mesh Mesh, ErosionPath Path) Run(Mesh solid, Mesh tool, bool inset, ProgressReporter reporter, CancellationToken cancellationToken)
 		{
@@ -375,8 +377,8 @@ namespace MatterHackers.PolygonMesh.Csg
 			ThrowIfEmpty(solid, nameof(solid));
 			ThrowIfEmpty(tool, nameof(tool));
 
-			var solidManifold = ManifoldKernel.Import(solid, repairOrientation: false);
-			var toolManifold = ManifoldKernel.Import(tool, repairOrientation: false);
+			var solidManifold = ImportOperand(solid);
+			var toolManifold = ImportOperand(tool);
 
 			// The check above is not the same check. A mesh can carry triangles and still import
 			// to nothing: a zero-thickness shell - PlatonicSolids.CreateCube(2, 2, 0), or any
@@ -390,6 +392,98 @@ namespace MatterHackers.PolygonMesh.Csg
 			var result = Morph(solidManifold, toolManifold, inset, reporter, cancellationToken, out ErosionPath erosionPath);
 
 			return (ManifoldKernel.ToMesh(result, inset ? "minkowski difference" : "minkowski sum"), erosionPath);
+		}
+
+		/// <summary>
+		/// <see cref="ManifoldKernel.Import"/>, with one more chance for a closed surface that has a
+		/// patch of triangles wound against the rest of it, and one for a solid whose seams are split.
+		/// </summary>
+		/// <remarks>
+		/// The import balances directed edges, so a backward patch reads to it as
+		/// <see cref="RustStatus.NotClosed"/> even though every edge has its two faces. The reported
+		/// part (a 37,120-triangle mouse body with 320 triangles reversed) failed Dilate that way.
+		/// Such a surface has exactly one consistent winding up to its overall sign, and
+		/// <see cref="ConsistentWinding"/> keeps each surface's majority sign, so an inside-out shell
+		/// still means what it meant before - this is not the orientation repair declined above.
+		/// <para>
+		/// Here rather than in <see cref="ManifoldKernel.Import"/>: booleans and the bevel's output
+		/// gates classify meshes through that import, and a gate that quietly accepted a backward
+		/// patch would publish it. A Minkowski result is rebuilt from scratch by the kernel, so the
+		/// operand's winding never reaches the output.
+		/// </para>
+		/// <para>
+		/// A split-seam solid (every triangle its own three vertices, as STL stores it) imports
+		/// cleanly but only as triangle soup, because the import pairs edges by vertex index - and
+		/// the kernel's Minkowski refuses a soup operand as NotManifold. So a soup import is retried
+		/// with its exactly coincident vertices joined, and kept only if that pairs up. A mesh that
+		/// is soup for a real reason (an edge shared by four faces) stays soup and fails as before.
+		/// </para>
+		/// </remarks>
+		private static RustManifold ImportOperand(Mesh mesh)
+		{
+			var imported = ImportRewindingABackwardPatch(mesh);
+
+			if (imported.AsImpl().IsSoup)
+			{
+				var joined = ConsistentWinding.JoinCoincidentVertices(mesh);
+
+				if (joined != null
+					&& TryImport(joined, out var paired)
+					&& !paired.AsImpl().IsSoup)
+				{
+					return paired;
+				}
+			}
+
+			return imported;
+		}
+
+		/// <summary>
+		/// The import with the backward-patch retry described on <see cref="ImportOperand"/>.
+		/// </summary>
+		private static RustManifold ImportRewindingABackwardPatch(Mesh mesh)
+		{
+			try
+			{
+				return ManifoldKernel.Import(mesh, repairOrientation: false);
+			}
+			catch (MeshImportRejectedException refused) when (refused.Status == RustStatus.NotClosed)
+			{
+				// Exact positions first, as the kernel welds. Then the tolerance-welded copy, for a
+				// backward patch that only joins the rest across seams apart by a rounding step -
+				// read unwelded, such a patch is a surface of its own and has nothing to disagree with.
+				var rewound = ConsistentWinding.Rewind(mesh);
+				if (rewound != null
+					&& TryImport(rewound, out var imported))
+				{
+					return imported;
+				}
+
+				var welded = ManifoldKernel.WeldSeams(mesh);
+				var weldedRewound = welded == null ? null : ConsistentWinding.Rewind(welded);
+				if (weldedRewound != null
+					&& TryImport(weldedRewound, out imported))
+				{
+					return imported;
+				}
+
+				// The original complaint, not one about a copy the caller never handed in.
+				throw;
+			}
+		}
+
+		private static bool TryImport(Mesh mesh, out RustManifold imported)
+		{
+			try
+			{
+				imported = ManifoldKernel.Import(mesh, repairOrientation: false);
+				return true;
+			}
+			catch (MeshImportRejectedException)
+			{
+				imported = null;
+				return false;
+			}
 		}
 
 		/// <summary>

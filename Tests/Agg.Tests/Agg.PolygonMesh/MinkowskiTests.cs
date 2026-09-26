@@ -349,6 +349,163 @@ namespace MatterHackers.PolygonMesh.UnitTests
 		}
 
 		/// <summary>
+		/// A closed solid with a patch of triangles wound backward is still one solid, and dilates
+		/// exactly as it would with every triangle wound outward.
+		/// </summary>
+		/// <remarks>
+		/// The reported part ("Dialate Failed.mcx", a 37,120-triangle mouse body) was a single
+		/// closed, orientable surface with 320 triangles wound against their neighbours. Every
+		/// edge had two faces, so it passed <c>IsManifold</c>, but the kernel's import balances
+		/// directed edges and refused it as <see cref="ManifoldStatus.NotClosed"/> - so Dilate
+		/// failed on a part that looked and measured whole.
+		/// </remarks>
+		[Test]
+		public async Task ASolidWithAPatchWoundBackwardDilatesLikeTheCleanSolid()
+		{
+			var ball = MinkowskiProcessing.SphereMesh(1.0, 8);
+			var clean = Cleaned(MinkowskiProcessing.MinkowskiSum(PlatonicSolids.CreateCube(CubeSide, CubeSide, CubeSide), ball));
+
+			var patched = PlatonicSolids.CreateCube(CubeSide, CubeSide, CubeSide);
+			patched.ReverseFace(0);
+			patched.ReverseFace(1);
+			AddCollapsedSliver(patched);
+
+			var dilated = Cleaned(MinkowskiProcessing.MinkowskiSum(patched, ball));
+
+			await Assert.That(dilated.IsManifold()).IsTrue();
+			await Assert.That(SignedVolume(dilated)).IsEqualTo(SignedVolume(clean)).Within(1e-6)
+				.Because("the backward patch is the same surface, so the dilation is the same solid");
+		}
+
+		/// <summary>
+		/// The same repair when the backward patch shares no vertex index with its neighbours:
+		/// a cube stored as triangle soup, one whole side wound backward.
+		/// </summary>
+		/// <remarks>
+		/// The kernel joins triangles by position, not by index, so a surface whose seams are split
+		/// (as STL and many exporters store it) is one surface to it. The rewind has to read it the
+		/// same way, or a patch bounded by split seams is an island of its own and never flips.
+		/// </remarks>
+		[Test]
+		public async Task ASoupSolidWithAWholeSideWoundBackwardDilatesLikeTheCleanSolid()
+		{
+			var ball = MinkowskiProcessing.SphereMesh(1.0, 8);
+			var cube = PlatonicSolids.CreateCube(CubeSide, CubeSide, CubeSide);
+			var clean = Cleaned(MinkowskiProcessing.MinkowskiSum(cube, ball));
+
+			var soup = AsSoup(cube);
+
+			// Reverse both triangles of the side the first triangle lies on.
+			var side = soup.Faces[0].normal;
+			for (int i = 0; i < soup.Faces.Count; i++)
+			{
+				if ((soup.Faces[i].normal - side).Length < 1e-6)
+				{
+					soup.ReverseFace(i);
+				}
+			}
+
+			AddCollapsedSliver(soup);
+
+			var dilated = Cleaned(MinkowskiProcessing.MinkowskiSum(soup, ball));
+
+			await Assert.That(dilated.IsManifold()).IsTrue();
+			await Assert.That(SignedVolume(dilated)).IsEqualTo(SignedVolume(clean)).Within(1e-6)
+				.Because("the backward side is the same surface, so the dilation is the same solid");
+		}
+
+		/// <summary>
+		/// A correctly wound solid whose seams are split - every triangle its own three vertices,
+		/// as STL stores it - dilates and erodes exactly like the same solid with shared vertices.
+		/// </summary>
+		/// <remarks>
+		/// The kernel import pairs edges by vertex index, so a split seam leaves the operand as
+		/// triangle soup: it imports, and then the Minkowski refuses it as NotManifold.
+		/// </remarks>
+		[Test]
+		public async Task ASoupSolidDilatesAndErodesLikeTheIndexedSolid()
+		{
+			var ball = MinkowskiProcessing.SphereMesh(1.0, 8);
+			var cube = PlatonicSolids.CreateCube(CubeSide, CubeSide, CubeSide);
+			var soup = AsSoup(cube);
+
+			var dilated = Cleaned(MinkowskiProcessing.MinkowskiSum(soup, ball));
+			await Assert.That(dilated.IsManifold()).IsTrue();
+			await Assert.That(SignedVolume(dilated))
+				.IsEqualTo(SignedVolume(Cleaned(MinkowskiProcessing.MinkowskiSum(cube, ball)))).Within(1e-6);
+
+			var eroded = Cleaned(MinkowskiProcessing.MinkowskiDifference(soup, ball));
+			await Assert.That(eroded.IsManifold()).IsTrue();
+			await Assert.That(SignedVolume(eroded))
+				.IsEqualTo(SignedVolume(Cleaned(MinkowskiProcessing.MinkowskiDifference(cube, ball)))).Within(1e-6);
+		}
+
+		/// <summary>
+		/// A backward side that meets the rest only across seams a rounding step apart is still found
+		/// and rewound: read by exact position it is a surface of its own with nothing to disagree
+		/// with, so the rewind has to fall back to the tolerance-welded copy.
+		/// </summary>
+		[Test]
+		public async Task ABackwardSideAcrossSplitSeamsIsRewoundAfterWelding()
+		{
+			var soup = AsSoup(PlatonicSolids.CreateCube(CubeSide, CubeSide, CubeSide));
+
+			var side = soup.Faces[0].normal;
+			var nudge = new Vector3Float(1e-5f, 1e-5f, 1e-5f);
+			for (int i = 0; i < soup.Faces.Count; i++)
+			{
+				var face = soup.Faces[i];
+				if ((face.normal - side).Length < 1e-6)
+				{
+					// Soup, so these three vertices are this triangle's alone.
+					soup.Vertices[face.v0] += nudge;
+					soup.Vertices[face.v1] += nudge;
+					soup.Vertices[face.v2] += nudge;
+					soup.ReverseFace(i);
+				}
+			}
+
+			// The branch under test: by exact position there is nothing to flip.
+			await Assert.That(ConsistentWinding.Rewind(soup)).IsNull();
+
+			var rewound = MeshRepair.RewindBackwardPatches(soup);
+
+			await Assert.That(rewound).IsNotNull()
+				.Because("the welded copy joins the backward side to the rest, and then it disagrees with it");
+			await Assert.That(SignedVolume(rewound)).IsEqualTo(CubeSide * CubeSide * CubeSide).Within(0.01);
+		}
+
+		/// <summary>The same solid with every triangle given its own three vertices.</summary>
+		private static Mesh AsSoup(Mesh mesh)
+		{
+			var soup = new Mesh();
+			foreach (var face in mesh.Faces)
+			{
+				int first = soup.Vertices.Count;
+				soup.Vertices.Add(mesh.Vertices[face.v0]);
+				soup.Vertices.Add(mesh.Vertices[face.v1]);
+				soup.Vertices.Add(mesh.Vertices[face.v2]);
+				soup.Faces.Add(first, first + 1, first + 2, soup.Vertices);
+			}
+
+			return soup;
+		}
+
+		/// <summary>
+		/// Adds a zero-area triangle (a, b, a) across two opposite corners of a centred cube. Its
+		/// edge a-b is shared by no other triangle, so it is the one edge whose only two uses are
+		/// the sliver itself - the shape that must not read as a winding contradiction.
+		/// </summary>
+		private static void AddCollapsedSliver(Mesh mesh)
+		{
+			int a = 0;
+			var opposite = -mesh.Vertices[a];
+			int b = mesh.Vertices.FindIndex(v => (v - opposite).Length < 1e-6);
+
+			mesh.Faces.Add(a, b, a, Vector3Float.UnitZ);
+		}
+
+		/// <summary>
 		/// An empty operand is refused rather than treated as a no-op. The kernel's own answer to
 		/// one is the <em>other</em> operand unchanged, which would show up as a fillet that
 		/// silently did nothing.

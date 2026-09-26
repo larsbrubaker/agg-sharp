@@ -47,6 +47,39 @@ namespace MatterHackers.PolygonMesh.Csg
 	public static class MeshRepair
 	{
 		/// <summary>
+		/// Rewinds the triangles of a closed surface that are wound against the rest of it - the
+		/// backward patch the kernel import refuses as NotClosed although every edge has its two
+		/// faces - and returns the copy, or null when there is nothing to rewind.
+		/// </summary>
+		/// <remarks>
+		/// Only the minority winding of each connected surface flips, so no shape changes and a shell
+		/// that is inside out as a whole stays that way (<see cref="TryRepairOrientation"/> is the
+		/// repair for that). Surfaces are joined by exact position first, then across seams a
+		/// rounding step apart. The copy has one vertex per position and keeps the original faces'
+		/// order, colours and textures; it is meant to be handed to the kernel as an operand, after the
+		/// kernel refused the original.
+		/// </remarks>
+		/// <param name="sourceMesh">The mesh to rewind. Left unmodified.</param>
+		/// <returns>The rewound copy, or null.</returns>
+		public static Mesh RewindBackwardPatches(Mesh sourceMesh)
+		{
+			if (sourceMesh == null
+				|| sourceMesh.Faces.Count == 0)
+			{
+				return null;
+			}
+
+			var rewound = ConsistentWinding.Rewind(sourceMesh);
+			if (rewound != null)
+			{
+				return rewound;
+			}
+
+			var welded = ManifoldKernel.WeldSeams(sourceMesh);
+			return welded == null ? null : ConsistentWinding.Rewind(welded);
+		}
+
+		/// <summary>
 		/// Rewinds inside-out shells so every body reads as solid material, using the
 		/// ManifoldSharp kernel's exact shell-level orientation repair.
 		/// </summary>
