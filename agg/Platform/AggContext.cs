@@ -1,5 +1,5 @@
 ﻿/*
-Copyright (c) 2019, Lars Brubaker, John Lewin
+Copyright (c) 2026, Lars Brubaker, John Lewin
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -139,6 +139,28 @@ namespace MatterHackers.Agg.Platform
 			: OsInformation.OperatingSystem;
 
 		public static Point2D DesktopSize => OsInformation.DesktopSize;
+
+		/// <summary>
+		/// Watches directories for outside changes. Defaults to a monitor that watches nothing (every
+		/// <see cref="IDirectoryMonitor.Watch"/> answers null); a desktop app head registers
+		/// <c>new FileSystemDirectoryMonitor()</c> at boot.
+		/// </summary>
+		/// <remarks>
+		/// The default stays unwatched rather than picking <see cref="FileSystemDirectoryMonitor"/> per OS:
+		/// the browser has no watcher, and test runs rely on nothing watching (and calling back on a pool
+		/// thread) unless a head asked for it.
+		/// </remarks>
+		public static IDirectoryMonitor DirectoryMonitor { get; set; } = new UnwatchedDirectories();
+
+		private class UnwatchedDirectories : IDirectoryMonitor
+		{
+			public IDirectoryWatch Watch(string directoryPath, Action directoryChanged)
+			{
+				// Silent, and not even a Debug.WriteLine: "no watch" is what most hosts do and every caller
+				// already handles it. Listings simply refresh when the user asks.
+				return null;
+			}
+		}
 
 		public static PlatformConfig Config
 		{
