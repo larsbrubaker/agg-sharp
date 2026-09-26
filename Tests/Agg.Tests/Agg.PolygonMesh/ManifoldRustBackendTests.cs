@@ -29,7 +29,6 @@ either expressed or implied, of the FreeBSD Project.
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -563,88 +562,131 @@ namespace MatterHackers.PolygonMesh.UnitTests
 		/// The same contract for the pairwise path - a reporter drops the combine out of the
 		/// CSG tree onto the explicit binary entry point, which has its own token bridging -
 		/// and this time with a cancel that arrives from another thread while the boolean is
-		/// genuinely running, and a bound on how long it takes to be honoured.
+		/// genuinely running, and proof that it is honoured before the work finishes.
 		/// </summary>
 		/// <remarks>
-		/// The progress reporter is the phase witness: the kernel only calls it from inside the
-		/// boolean, so its first callback proves the imports are done and the work has started.
-		/// The main thread waits for that callback before cancelling, which makes "mid-flight"
-		/// a fact rather than a hope.
+		/// The progress reporter is both the phase witness and the measure of work done. The
+		/// kernel only calls it from inside the boolean, so its first callback proves the imports
+		/// are done and the work has started. Its phase reports are driven by work, never by time,
+		/// so the uncancelled run's list of phases is the same on every machine: it is the full
+		/// run's work, counted.
 		/// <para>
-		/// A RELATIVE-TIMING assertion, in the shape manifold-sharp's CancelTests uses and for
-		/// the reason its header gives: an absolute millisecond threshold is a machine-speed
-		/// lottery, while a ratio survives a loaded CI box because both numbers inflate
-		/// together. The 2x ceiling is theirs and is deliberately loose - it fails when a cancel
-		/// is being ignored until the operation finishes on its own, not when the machine is
-		/// busy. Both numbers are measured from the FIRST REPORTER CALLBACK to the return, not
-		/// from the start of the call: importing dominates this input, and including it would
-		/// compare two runs that both paid the same large fixed cost and hide whatever the
-		/// boolean phase did.
+		/// The cancelled run parks the kernel inside that first callback until the main thread has
+		/// signalled the token, so the cancel lands mid-flight at the same point every time, from
+		/// another thread. It must then stop early: throw a cancellation, produce no result, and
+		/// enter fewer kernel phases than the full run. A cancel that is ignored until the work
+		/// finishes enters every one of them, however fast the machine. This replaced a
+		/// cancelled-versus-uncancelled wall-clock ratio, which on a fast box compared two ~30 ms
+		/// numbers and failed on noise.
+		/// </para>
+		/// <para>
+		/// The Nonzero winding rule is what makes the work countable: it runs the robust engine,
+		/// which reports eight determinate phases. The default rule's exact engine reports one
+		/// indeterminate phase and then nothing, so a cancel it ignored would enter exactly as many
+		/// phases as one it honoured. The token bridging under test is the same call either way;
+		/// the exact engine's own cancel checks are the kernel's to test.
 		/// </para>
 		/// </remarks>
 		[Test]
-		public async Task CancelFromAnotherThreadDuringTheBooleanReturnsPromptly()
+		public async Task CancelFromAnotherThreadDuringTheBooleanStopsBeforeTheWorkFinishes()
 		{
 			var meshA = UvSphere(10, 64);
 			var meshB = UvSphere(10, 64);
 			var operands = new[] { (meshA, Matrix4X4.Identity), (meshB, Matrix4X4.CreateTranslation(5, 0, 0)) };
 
-			// Time from the first callback to the return: the boolean phase alone.
-			TimeSpan BooleanPhase(CancellationToken cancellationToken, Action onFirstReport, out Exception failure)
+			// The phase messages the kernel reported, in order, and the mesh or exception it ended with.
+			List<string> Run(CancellationToken cancellationToken, Action onFirstReport, out Mesh result, out Exception failure)
 			{
-				var phase = new Stopwatch();
+				var phases = new List<string>();
 				Action<double, string> reporter = (ratio, message) =>
 				{
-					if (!phase.IsRunning)
+					bool first;
+					lock (phases)
 					{
-						phase.Start();
+						first = phases.Count == 0;
+						if (first || phases[^1] != message)
+						{
+							phases.Add(message);
+						}
+					}
+
+					if (first)
+					{
 						onFirstReport?.Invoke();
 					}
 				};
 
+				result = null;
 				failure = null;
 				try
 				{
-					BooleanProcessing.DoArray(
+					result = BooleanProcessing.DoArray(
 						operands,
 						CsgModes.Union,
 						ProcessingModes.Polygons,
 						ProcessingResolution._64,
 						ProcessingResolution._64,
 						reporter,
-						cancellationToken);
+						cancellationToken,
+						windingRule: WindingRule.Nonzero);
 				}
 				catch (Exception exception)
 				{
 					failure = exception;
 				}
 
-				return phase.Elapsed;
+				lock (phases)
+				{
+					return phases.ToList();
+				}
 			}
 
-			var uncancelled = BooleanPhase(CancellationToken.None, null, out var baselineFailure);
+			var fullRun = Run(CancellationToken.None, null, out var baseline, out var baselineFailure);
 
 			await Assert.That(baselineFailure).IsNull();
-			await Assert.That(uncancelled > TimeSpan.Zero)
+			await Assert.That(baseline.Faces.Count).IsGreaterThan(0);
+
+			// The last report is the seam's own "combining", published after the kernel has
+			// returned - a cancelled run never gets there whether or not the kernel honoured the
+			// cancel, so it is not work a cancel can be credited with skipping. Pinned rather than
+			// assumed, so a renamed message cannot quietly turn this test into one that always passes.
+			await Assert.That(fullRun[^1].EndsWith("combining"))
 				.IsTrue()
-				.Because("the reporter never fired, so there is no boolean phase to measure and no proof the kernel was ever entered");
+				.Because($"the full run's last report was expected to be the seam's combining step: [{string.Join(", ", fullRun)}]");
+			var kernelPhases = fullRun.Take(fullRun.Count - 1).ToList();
+			await Assert.That(kernelPhases.Count)
+				.IsGreaterThan(1)
+				.Because("the kernel must pass through more than one phase, or there is no later work a cancel could be shown to skip");
 
 			using var cancelling = new CancellationTokenSource();
-			using var insideTheKernel = new SemaphoreSlim(0, 1);
+			using var insideTheKernel = new ManualResetEventSlim(false);
+			using var cancelSent = new ManualResetEventSlim(false);
 
+			Mesh cancelledResult = null;
 			Exception thrown = null;
-			var cancelledPhase = TimeSpan.Zero;
+			List<string> cancelledRun = null;
 
 			var worker = new Thread(() =>
 			{
-				cancelledPhase = BooleanPhase(cancelling.Token, () => insideTheKernel.Release(), out thrown);
+				cancelledRun = Run(
+					cancelling.Token,
+					() =>
+					{
+						// Hold the kernel inside its first phase until the other thread has
+						// cancelled, so the cancel lands mid-work on every machine.
+						insideTheKernel.Set();
+						cancelSent.Wait();
+					},
+					out cancelledResult,
+					out thrown);
 			});
 
 			worker.Start();
 
-			// Not a delay: the boolean has reported its first phase, so it is running now.
+			// Not a delay: the boolean has reported its first phase and is parked there.
 			insideTheKernel.Wait();
 			cancelling.Cancel();
+			cancelSent.Set();
 			worker.Join();
 
 			await Assert.That(thrown).IsNotNull()
@@ -652,12 +694,13 @@ namespace MatterHackers.PolygonMesh.UnitTests
 			await Assert.That(thrown is OperationCanceledException)
 				.IsTrue()
 				.Because($"a cancel must surface as a cancellation, not as {thrown?.GetType().Name}: {thrown?.Message}");
+			await Assert.That(cancelledResult).IsNull();
 
-			await Assert.That(cancelledPhase * 2 < uncancelled)
+			await Assert.That(cancelledRun.Count < kernelPhases.Count)
 				.IsTrue()
 				.Because(
-					$"the cancelled boolean phase took {cancelledPhase}, which is not well under the "
-					+ $"uncancelled {uncancelled} - the cancel is being ignored until the work finishes");
+					$"the cancelled boolean went on to report [{string.Join(", ", cancelledRun)}], every kernel phase of the full run "
+					+ $"[{string.Join(", ", kernelPhases)}] - the cancel is being ignored until the work finishes");
 		}
 
 
