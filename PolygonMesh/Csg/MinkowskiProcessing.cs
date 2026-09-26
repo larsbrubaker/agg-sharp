@@ -553,10 +553,15 @@ namespace MatterHackers.PolygonMesh.Csg
 
 			// The adapter, not the raw reporter: it swallows a throwing sink, which matters
 			// because this callback is invoked from inside the kernel's hull loop, where an
-			// escaping exception would lose geometry that had otherwise been computed.
+			// escaping exception would lose geometry that had otherwise been computed. The kernel counts
+			// work items; MinkowskiProgressModel reweights them by their measured cost so the bar tracks
+			// the clock (and so a time-remaining estimate built on it is honest).
+			int solidTriangles = solid.NumTri();
 			var progress = adapter == null
 				? null
-				: new RustProgressReporter((phase, fraction) => adapter.Report((RustPhases.Name(phase), fraction)));
+				: new RustProgressReporter((phase, fraction) => adapter.Report((
+					RustPhases.Name(phase),
+					fraction.HasValue ? MinkowskiProgressModel.TimeFraction(solidTriangles, fraction.Value) : null)));
 
 			// One token per operation, as CancelToken's own remarks require: it registers on
 			// the caller's source and is never unregistered, so a token that outlived the call
