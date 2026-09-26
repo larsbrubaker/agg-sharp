@@ -75,5 +75,41 @@ namespace MatterHackers.PolygonMesh.UnitTests
 			double allBatches = MinkowskiProgressModel.TimeFraction(triangles, (total - 1) / (double)total);
 			await Assert.That(allBatches).IsEqualTo(0.9).Within(0.001);
 		}
+
+		[Test]
+		public async Task TheDilationTreeFractionRisesLinearlyThroughTheLeavesThenTheTree()
+		{
+			const int triangles = 1600;
+			long total = MinkowskiProgressModel.TreeUnits(triangles);
+
+			// 1600 hulls, 101 leaves (the solid is one), 100 tree nodes and the closing pass.
+			await Assert.That(total).IsEqualTo(1600 + 101 + 100 + 1);
+
+			double previous = -1;
+			for (long unit = 0; unit <= total; unit++)
+			{
+				double fraction = MinkowskiProgressModel.TreeTimeFraction(triangles, unit / (double)total, 10);
+				await Assert.That(fraction).IsGreaterThanOrEqualTo(previous);
+				previous = fraction;
+			}
+
+			await Assert.That(MinkowskiProgressModel.TreeTimeFraction(triangles, 0, 10)).IsEqualTo(0.0);
+			await Assert.That(MinkowskiProgressModel.TreeTimeFraction(triangles, 1, 10)).IsEqualTo(1.0);
+
+			// Half the leaf work done is half the leaves' share of the clock.
+			double halfLeaves = MinkowskiProgressModel.TreeTimeFraction(triangles, (1701 / 2.0) / total, 10);
+			await Assert.That(halfLeaves).IsEqualTo(MinkowskiProgressModel.TreeLeafTimeShare / 2).Within(1e-9);
+
+			// The bottom level is half the tree's unions but many small ones on every core, so it
+			// takes well under half the levels' share; the few big unions at the top get the rest,
+			// which is what stops the bar holding at the very end.
+			double bottomLevelDone = MinkowskiProgressModel.TreeTimeFraction(triangles, (1701 + 50) / (double)total, 10);
+			double levelsShareAfterBottom = (bottomLevelDone - MinkowskiProgressModel.TreeLeafTimeShare) / MinkowskiProgressModel.TreeLevelTimeShare;
+			await Assert.That(levelsShareAfterBottom).IsLessThan(0.3);
+
+			// Everything but the closing pass done: the leaves and levels, and not the last stretch.
+			double allNodes = MinkowskiProgressModel.TreeTimeFraction(triangles, (total - 1) / (double)total, 10);
+			await Assert.That(allNodes).IsEqualTo(MinkowskiProgressModel.TreeLeafTimeShare + MinkowskiProgressModel.TreeLevelTimeShare).Within(1e-9);
+		}
 	}
 }

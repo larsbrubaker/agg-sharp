@@ -39,6 +39,7 @@ using MatterHackers.Agg;
 using RustCancelToken = ManifoldSharp.CancelToken;
 using RustManifold = ManifoldSharp.Manifold;
 using RustPhases = ManifoldSharp.Phases;
+using RustParallel = ManifoldSharp.ManifoldParallel;
 using RustProgressReporter = ManifoldSharp.ProgressReporter;
 using RustStatus = ManifoldSharp.Error;
 
@@ -62,7 +63,12 @@ namespace MatterHackers.PolygonMesh.Csg
 	/// <item>nonconvex &#8853; convex (and every erosion the closed form below declines) - one
 	/// convex hull per triangle of the nonconvex operand, batch-unioned 1000 at a time. Linear
 	/// in that operand's triangle count, with a boolean's worth of work per triangle: seconds
-	/// for a few hundred triangles, minutes for a few thousand.</item>
+	/// for a few hundred triangles, minutes for a few thousand. A <em>dilation</em> of this kind
+	/// never reaches the sweep: this class routes it to the kernel's
+	/// <c>Manifold.TryDilateByConvex</c>, which builds the same hulls and unions them as a
+	/// balanced tree across every core - 5-8x faster in Release on 6000-12000-triangle parts,
+	/// with the same volume and genus (manifold-sharp divergence ledger entry 6). Erosions of
+	/// non-convex solids still sweep.</item>
 	/// <item>nonconvex &#8853; nonconvex - a hull per <em>pair</em> of faces. Quadratic, and only
 	/// worth starting on toy meshes.</item>
 	/// </list>
@@ -155,6 +161,15 @@ namespace MatterHackers.PolygonMesh.Csg
 
 	public static class MinkowskiProcessing
 	{
+		private static long dilationTreeRuns;
+
+		/// <summary>
+		/// How many dilations in this process took the kernel's parallel union tree rather than the
+		/// sweep. A path signal for tests - a caller cannot see which algorithm answered otherwise,
+		/// since both give the same solid - in the spirit of <see cref="ErosionPath"/>.
+		/// </summary>
+		public static long DilationTreeRuns => Interlocked.Read(ref dilationTreeRuns);
+
 		/// <summary>
 		/// Dilation: every point of <paramref name="solid"/> swept by <paramref name="tool"/>,
 		/// which grows the solid by the tool's extent in every direction.
@@ -539,9 +554,9 @@ namespace MatterHackers.PolygonMesh.Csg
 			CancellationToken cancellationToken,
 			out ErosionPath erosionPath)
 		{
-			// A dilation has no closed form to decline, so it is always the sweep. Nothing public
-			// surfaces the path for a sum - MinkowskiSum has no such overload - so this is only
-			// here to give the out parameter a defined value on that leg.
+			// ErosionPath names erosion algorithms only. Nothing public surfaces a path for a sum -
+			// MinkowskiSum has no such overload - so on that leg this only gives the out parameter
+			// a defined value.
 			erosionPath = ErosionPath.Sweep;
 
 			// HasTarget rather than a null check: ProgressReporter.Null and any reporter built
@@ -562,6 +577,16 @@ namespace MatterHackers.PolygonMesh.Csg
 				: new RustProgressReporter((phase, fraction) => adapter.Report((
 					RustPhases.Name(phase),
 					fraction.HasValue ? MinkowskiProgressModel.TimeFraction(solidTriangles, fraction.Value) : null)));
+
+			// The dilation tree counts different units (hull, leaf, tree node) and reports them from
+			// worker threads, so two reports can arrive out of order; it gets its own time mapping,
+			// and the adapter's high-water mark keeps the bar from stepping back.
+			int treeParallelism = RustParallel.Enabled ? Environment.ProcessorCount : 1;
+			var treeProgress = adapter == null
+				? null
+				: new RustProgressReporter((phase, fraction) => adapter.Report((
+					RustPhases.Name(phase),
+					fraction.HasValue ? MinkowskiProgressModel.TreeTimeFraction(solidTriangles, fraction.Value, treeParallelism) : null)));
 
 			// One token per operation, as CancelToken's own remarks require: it registers on
 			// the caller's source and is never unregistered, so a token that outlived the call
@@ -585,6 +610,16 @@ namespace MatterHackers.PolygonMesh.Csg
 			{
 				result = closedForm;
 				erosionPath = ErosionPath.ClosedForm;
+			}
+			else if (!inset && solid.TryDilateByConvex(tool, token, treeProgress, out RustManifold treeSum))
+			{
+				// Nonconvex (+) convex through the kernel's parallel union tree: the same hulls,
+				// unioned as a balanced tree instead of serial 1000-hull batches. Same volume and
+				// genus as the sweep, different triangles. It declines, having reported nothing,
+				// for any other pair of operands, and the sweep below runs as before; a cancelled
+				// run comes back applied, as the closed form's does.
+				result = treeSum;
+				Interlocked.Increment(ref dilationTreeRuns);
 			}
 			else
 			{

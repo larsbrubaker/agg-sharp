@@ -112,5 +112,126 @@ namespace MatterHackers.PolygonMesh.Csg
 
 			return Math.Clamp(work / (triangles * (HullWeight + BatchUnionWeight + MergeWeight)), 0, 1);
 		}
+
+		/// <summary>The kernel's dilation-tree leaf size (ConvexDilation.LeafSize).</summary>
+		public const int TreeLeafSize = 16;
+
+		/// <summary>
+		/// The share of a dilation tree's running time spent building and unioning the leaves.
+		/// </summary>
+		/// <remarks>
+		/// From two Release runs of the G203 part (46854 triangles, a 12-segment ball): the leaves
+		/// took 55-57 s of runs lasting 81 s and 120 s (the second on a loaded machine), so a bit over
+		/// half. The pairwise levels and the closing pass share the rest, and in the slower run the
+		/// top few levels alone held the bar for 40 s when the levels were counted by node - which
+		/// is why the levels are weighted below rather than counted.
+		/// </remarks>
+		public const double TreeLeafTimeShare = 0.55;
+
+		/// <summary>The share of a dilation tree's running time spent in the pairwise levels.</summary>
+		public const double TreeLevelTimeShare = 0.37;
+
+		/// <summary>
+		/// How much more a union at one tree level costs than one at the level below. Each level's
+		/// operands are about twice the size, but siblings only overlap along a thin seam, so the
+		/// cost grows more slowly than the size. 1.5 puts the first two levels of the G203 tree at
+		/// about a third of the levels' time, as measured (about 20 s of about 60 s).
+		/// </summary>
+		public const double TreeLevelCostGrowth = 1.5;
+
+		/// <summary>
+		/// The number of progress units the kernel's dilation tree
+		/// (<c>Manifold.TryDilateByConvex</c>) reports for a solid of <paramref name="triangles"/>
+		/// triangles: a hull each, one per leaf (the solid is leaf 0), one per tree node - a binary
+		/// reduction of L leaves is L - 1 unions - and one for the closing pass.
+		/// </summary>
+		public static long TreeUnits(int triangles)
+		{
+			long leaves = TreeLeaves(triangles);
+			return triangles + leaves + (leaves - 1) + 1;
+		}
+
+		/// <summary>
+		/// Maps the kernel's unit fraction for a dilation tree over <paramref name="triangles"/>
+		/// triangles to the fraction of the expected running time. Monotonic, 0 at 0 and 1 at 1.
+		/// </summary>
+		/// <remarks>
+		/// Unlike the sweep, the tree's units are not reported in a fixed order: leaves run in
+		/// parallel, each reporting its hulls and then itself, so the count only says how much is
+		/// done, not which piece. That is enough, because the stages are sequential: every hull and
+		/// leaf unit is spent before the first tree node, and each tree level finishes before the
+		/// next starts, so a count of finished nodes names the level being worked on and how far
+		/// through it the run is.
+		/// <para>
+		/// The leaf stage maps linearly onto its share - a leaf's sixteen hull units and its union
+		/// unit arrive together, so the count is proportional to leaf work. The levels do not: the
+		/// bottom one is half the nodes but many small unions spread over every core, while the top
+		/// ones are a few large unions with cores idle. Each level is given a wall-time weight of
+		/// its rounds of work (unions over <paramref name="parallelism"/>, rounded up) times a per-union
+		/// cost growing by <see cref="TreeLevelCostGrowth"/> per level, and the bar moves through a
+		/// level linearly by its own nodes. The closing pass - one kernel unit, spent only when the
+		/// phase completes - is the remainder. The caller's high-water mark keeps the bar from
+		/// stepping back when two workers report out of order.
+		/// </para>
+		/// </remarks>
+		/// <param name="triangles">The solid's triangle count.</param>
+		/// <param name="kernelFraction">The kernel's reported fraction of its units.</param>
+		/// <param name="parallelism">How many unions run at once; the core count when the kernel runs
+		/// in parallel, 1 when it does not.</param>
+		public static double TreeTimeFraction(int triangles, double kernelFraction, int parallelism)
+		{
+			if (triangles <= 0 || kernelFraction >= 1)
+			{
+				return Math.Clamp(kernelFraction, 0, 1);
+			}
+
+			if (kernelFraction <= 0)
+			{
+				return 0;
+			}
+
+			long total = TreeUnits(triangles);
+			long leaves = TreeLeaves(triangles);
+			long leafStageUnits = triangles + leaves;
+			double units = kernelFraction * total;
+			if (units <= leafStageUnits)
+			{
+				return TreeLeafTimeShare * units / leafStageUnits;
+			}
+
+			// Walk the levels exactly as ConvexDilation reduces them: a level of n nodes performs
+			// n / 2 unions and carries an odd one up unchanged.
+			int cores = Math.Max(1, parallelism);
+			var unionsPerLevel = new System.Collections.Generic.List<long>();
+			var weights = new System.Collections.Generic.List<double>();
+			double totalWeight = 0;
+			double cost = 1;
+			for (long nodes = leaves; nodes > 1; nodes = (nodes / 2) + (nodes & 1))
+			{
+				long unions = nodes / 2;
+				double weight = cost * ((unions + cores - 1) / cores);
+				unionsPerLevel.Add(unions);
+				weights.Add(weight);
+				totalWeight += weight;
+				cost *= TreeLevelCostGrowth;
+			}
+
+			double doneNodes = units - leafStageUnits;
+			double doneWeight = 0;
+			for (int level = 0; level < unionsPerLevel.Count && doneNodes > 0; level++)
+			{
+				double through = Math.Min(doneNodes, unionsPerLevel[level]);
+				doneWeight += weights[level] * through / unionsPerLevel[level];
+				doneNodes -= through;
+			}
+
+			double levelsDone = totalWeight <= 0 ? 1 : doneWeight / totalWeight;
+			return Math.Clamp(TreeLeafTimeShare + (TreeLevelTimeShare * levelsDone), 0, 1);
+		}
+
+		private static long TreeLeaves(int triangles)
+		{
+			return ((triangles + TreeLeafSize - 1L) / TreeLeafSize) + 1;
+		}
 	}
 }
