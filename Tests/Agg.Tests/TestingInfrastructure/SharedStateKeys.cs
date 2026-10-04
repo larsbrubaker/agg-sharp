@@ -42,6 +42,9 @@ namespace MatterHackers.Agg.Tests
 		/// <summary><c>Clipboard.Instance</c>, swapped by <c>Clipboard.SetSystemClipboard</c>.</summary>
 		public const string Clipboard = "Clipboard";
 
+		/// <summary><c>AudioRecorder.Instance</c>, swapped by <c>AudioRecorder.SetSystemAudioRecorder</c>.</summary>
+		public const string AudioRecorder = "AudioRecorder";
+
 		/// <summary><c>InputProfiles.Current</c>, which decides whether the on-screen keyboard shows.</summary>
 		public const string InputProfiles = "InputProfiles";
 
