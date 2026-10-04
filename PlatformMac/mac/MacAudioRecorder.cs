@@ -165,8 +165,18 @@ namespace MatterHackers.Agg.UI
 					return 0;
 				}
 
-				ObjC.Send_v(recorder, SelUpdateMeters);
-				return LevelFromDecibels(Send_f_Q(recorder, SelAveragePowerForChannel, 0));
+				// Polled from a UI timer or the thread pool, neither of which drains an autorelease pool, so anything
+				// AVFoundation autoreleases here would pile up for the whole recording without one.
+				IntPtr pool = objc_autoreleasePoolPush();
+				try
+				{
+					ObjC.Send_v(recorder, SelUpdateMeters);
+					return LevelFromDecibels(Send_f_Q(recorder, SelAveragePowerForChannel, 0));
+				}
+				finally
+				{
+					objc_autoreleasePoolPop(pool);
+				}
 			}
 		}
 
@@ -231,9 +241,18 @@ namespace MatterHackers.Agg.UI
 		{
 			if (recorder != IntPtr.Zero)
 			{
-				ObjC.Send_v(recorder, SelStop);
-				ObjC.Release(recorder);
-				recorder = IntPtr.Zero;
+				// Reached from the cap timer and thread-pool continuations, which have no autorelease pool of their own.
+				IntPtr pool = objc_autoreleasePoolPush();
+				try
+				{
+					ObjC.Send_v(recorder, SelStop);
+					ObjC.Release(recorder);
+				}
+				finally
+				{
+					objc_autoreleasePoolPop(pool);
+					recorder = IntPtr.Zero;
+				}
 			}
 		}
 
@@ -260,6 +279,14 @@ namespace MatterHackers.Agg.UI
 		/// freed by the runtime, so it is built once and kept, and requests are serialized through one pending
 		/// task source.
 		/// </summary>
+		/// <remarks>
+		/// The returned task can stay pending indefinitely: the user may leave the prompt up, and macOS gives no
+		/// timeout, so callers must let a cancel interrupt the wait (<see cref="AudioRecorderBase.Cancel"/> does,
+		/// honouring it when the answer arrives). And on an unbundled launch, TCC asks on behalf of the responsible
+		/// host app (Terminal, the IDE); if that app's own Info.plist lacks <c>NSMicrophoneUsageDescription</c>, macOS
+		/// may terminate the process instead of prompting, so a crash at the first mic use from an unusual host means
+		/// launching from Terminal or packaging the app with that key.
+		/// </remarks>
 		private static Task<bool> RequestPermissionAsync()
 		{
 			lock (PermissionLock)
@@ -324,7 +351,7 @@ namespace MatterHackers.Agg.UI
 					File.Delete(path);
 				}
 			}
-			catch (IOException)
+			catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
 			{
 				// A leftover temp file is harmless; the recording itself already succeeded or was discarded.
 			}

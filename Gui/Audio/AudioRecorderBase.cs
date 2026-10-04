@@ -121,7 +121,7 @@ namespace MatterHackers.Agg.UI
 
 				state = State.Starting;
 				cancelWhileStarting = false;
-				autoStopped = null;
+				DropAutoStoppedLocked();
 			}
 
 			try
@@ -188,7 +188,7 @@ namespace MatterHackers.Agg.UI
 		{
 			lock (sync)
 			{
-				autoStopped = null;
+				DropAutoStoppedLocked();
 				if (state == State.Starting)
 				{
 					cancelWhileStarting = true;
@@ -205,6 +205,14 @@ namespace MatterHackers.Agg.UI
 			}
 
 			CancelCapture();
+		}
+
+		// A recording the cap stopped may have failed to collect; its fault is observed so that dropping it never
+		// surfaces later as an unobserved task exception.
+		private void DropAutoStoppedLocked()
+		{
+			autoStopped?.ContinueWith(task => _ = task.Exception, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+			autoStopped = null;
 		}
 
 		/// <summary>
