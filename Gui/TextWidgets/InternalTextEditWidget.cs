@@ -176,6 +176,7 @@ namespace MatterHackers.Agg.UI
 			set
 			{
 				_charIndexToInsertBefore = value;
+				caretAtWrapEnd = false;
 			}
 		}
 
@@ -255,69 +256,69 @@ namespace MatterHackers.Agg.UI
 
         public void SetActualTextAndUpdate(string text)
         {
-			actualText = NormalizeLineEndings(text);
+			actualText = TextLineEndings.Normalize(text);
             UpdateDisplayText();
         }
 
-		private static string NormalizeLineEndings(string text)
-		{
-			return string.IsNullOrEmpty(text)
-				? ""
-				: text.Replace("\r\n", "\n").Replace('\r', '\n');
-		}
-
-		private static string NormalizeLineEndings(string text, int charIndex, out int normalizedCharIndex)
-		{
-			if (string.IsNullOrEmpty(text))
-			{
-				normalizedCharIndex = 0;
-				return "";
-			}
-
-			int rawLimit = Math.Max(0, Math.Min(charIndex, text.Length));
-			int normalizedIndex = 0;
-			var builder = new StringBuilder(text.Length);
-
-			for (int i = 0; i < text.Length; i++)
-			{
-				if (text[i] == '\r')
-				{
-					builder.Append('\n');
-					if (i < rawLimit)
-					{
-						normalizedIndex++;
-					}
-
-					if (i + 1 < text.Length && text[i + 1] == '\n')
-					{
-						i++;
-					}
-				}
-				else
-				{
-					builder.Append(text[i]);
-					if (i < rawLimit)
-					{
-						normalizedIndex++;
-					}
-				}
-			}
-
-			normalizedCharIndex = normalizedIndex;
-			return builder.ToString();
-		}
-
         private void UpdateDisplayText()
         {
-            if (maskChar.HasValue)
-            {
-                internalTextWidget.Text = new string(maskChar.Value, actualText.Length);
-            }
-            else
-            {
-                internalTextWidget.Text = actualText;
-            }
+            var display = maskChar.HasValue ? new string(maskChar.Value, actualText.Length) : actualText;
+            wrapLayout = WordWrapWidth > 0
+                ? TextEditWordWrap.Wrap(display, internalTextWidget.Printer.TypeFaceStyle, WordWrapWidth)
+                : TextEditWordWrap.Unwrapped;
+            internalTextWidget.Text = wrapLayout.DisplayText ?? display;
         }
+
+		private TextEditWordWrap wrapLayout = TextEditWordWrap.Unwrapped;
+
+		/// <summary>Set when End (or a click or Up/Down) put the caret at the end of a line that wraps inside a word,
+		/// which is the same text index as the start of the next line. Any other caret move clears it.</summary>
+		private bool caretAtWrapEnd;
+
+		private double wordWrapWidth;
+
+		/// <summary>
+		/// The width, in pixels, lines wrap at; 0 (the default) does not wrap. Display only - <see cref="Text"/> never
+		/// gains a newline. <see cref="TextEditWidget.WordWrap"/> keeps this at the width of the field.
+		/// </summary>
+		public double WordWrapWidth
+		{
+			get => wordWrapWidth;
+			set
+			{
+				if (wordWrapWidth != value)
+				{
+					wordWrapWidth = value;
+					// the text did not change, so re-laying it out must not tell anyone it did
+					rewrapping = true;
+					UpdateDisplayText();
+					rewrapping = false;
+					FixBarPosition(DesiredXPositionOnLine.Set);
+				}
+			}
+		}
+
+		private bool rewrapping;
+
+		/// <summary>The caret as an index into the drawn (wrapped) text.</summary>
+		private int CaretDisplayIndex
+		{
+			get
+			{
+				int displayIndex = wrapLayout.ToDisplay(CharIndexToInsertBefore);
+				return caretAtWrapEnd && wrapLayout.IsInsertedBreak(displayIndex - 1) ? displayIndex - 1 : displayIndex;
+			}
+		}
+
+		/// <summary>Puts the caret at drawn index <paramref name="displayIndex"/>, remembering an end-of-line position.</summary>
+		private void SetCaretFromDisplay(int displayIndex)
+		{
+			CharIndexToInsertBefore = wrapLayout.ToActual(displayIndex);
+			caretAtWrapEnd = wrapLayout.IsInsertedBreak(displayIndex);
+		}
+
+		/// <summary>The text the line keys walk: the drawn lines when wrapping, the real ones otherwise.</summary>
+		private string LineText => wrapLayout.IsWrapped ? internalTextWidget.Text : actualText;
 
         /// <summary>
         /// This is called when the user has modified the text control.  It will
@@ -364,7 +365,7 @@ namespace MatterHackers.Agg.UI
             get => actualText;
             set
             {
-				var normalizedText = NormalizeLineEndings(value);
+				var normalizedText = TextLineEndings.Normalize(value);
                 if (actualText != normalizedText)
                 {
                     CharIndexToInsertBefore = 0;
@@ -394,7 +395,7 @@ namespace MatterHackers.Agg.UI
             TabStop = true;
             MergeTypingDuringUndo = true;
 
-            actualText = NormalizeLineEndings(text);
+            actualText = TextLineEndings.Normalize(text);
             internalTextWidget = new TextWidget("", pointSize: pointSize, ellipsisIfClipped: false, textColor: _textColor, typeFace: typeFace);
             internalTextWidget.Selectable = false;
             internalTextWidget.AutoExpandBoundsToText = true;
@@ -434,6 +435,11 @@ namespace MatterHackers.Agg.UI
 
 		private void InternalTextWidget_TextChanged(object sender, EventArgs e)
 		{
+			if (rewrapping)
+			{
+				return;
+			}
+
 			OnTextChanged(e);
 		}
 
@@ -638,10 +644,12 @@ namespace MatterHackers.Agg.UI
         {
             double fontHeight = internalTextWidget.Printer.TypeFaceStyle.EmSizeInPixels;
 
+            int caretIndex = CaretDisplayIndex;
+            int selectionIndex = wrapLayout.ToDisplay(SelectionIndexToStartBefore);
             if (Selecting
                 && SelectionIndexToStartBefore != CharIndexToInsertBefore)
             {
-                Vector2 selectPosition = internalTextWidget.Printer.GetOffsetLeftOfCharacterIndex(SelectionIndexToStartBefore);
+                Vector2 selectPosition = internalTextWidget.Printer.GetOffsetLeftOfCharacterIndex(selectionIndex);
 
                 if (selectPosition.Y == InsertBarPosition.Y)
                 {
@@ -655,8 +663,8 @@ namespace MatterHackers.Agg.UI
                 }
                 else
                 {
-                    int firstCharToHighlight = Math.Min(CharIndexToInsertBefore, SelectionIndexToStartBefore);
-                    int lastCharToHighlight = Math.Max(CharIndexToInsertBefore, SelectionIndexToStartBefore);
+                    int firstCharToHighlight = Math.Min(caretIndex, selectionIndex);
+                    int lastCharToHighlight = Math.Max(caretIndex, selectionIndex);
                     int lineStart = firstCharToHighlight;
                     Vector2 lineStartPos = internalTextWidget.Printer.GetOffsetLeftOfCharacterIndex(lineStart);
                     int lineEnd = lineStart + 1;
@@ -742,7 +750,7 @@ namespace MatterHackers.Agg.UI
 			if (mouseEvent.Button == MouseButtons.Left)
 			{
 				StartSelectionIfRequired(null);
-				CharIndexToInsertBefore = internalTextWidget.Printer.GetCharacterIndexToStartBefore(new Vector2(mouseEvent.X, mouseEvent.Y));
+				SetCaretFromDisplay(internalTextWidget.Printer.GetCharacterIndexToStartBefore(new Vector2(mouseEvent.X, mouseEvent.Y)));
 
 				if (mouseEvent.Clicks < 2 || ShiftKeyIsDown(null))
 				{
@@ -791,7 +799,7 @@ namespace MatterHackers.Agg.UI
 			if (mouseIsDownLeft)
 			{
 				StartSelectionIfRequired(null);
-				CharIndexToInsertBefore = internalTextWidget.Printer.GetCharacterIndexToStartBefore(new Vector2(mouseEvent.X, mouseEvent.Y));
+				SetCaretFromDisplay(internalTextWidget.Printer.GetCharacterIndexToStartBefore(new Vector2(mouseEvent.X, mouseEvent.Y)));
 				if (CharIndexToInsertBefore < 0)
 				{
 					CharIndexToInsertBefore = 0;
@@ -853,7 +861,7 @@ namespace MatterHackers.Agg.UI
 
 		protected void FixBarPosition(DesiredXPositionOnLine desiredXPositionOnLine)
 		{
-			InsertBarPosition = internalTextWidget.Printer.GetOffsetLeftOfCharacterIndex(CharIndexToInsertBefore);
+			InsertBarPosition = internalTextWidget.Printer.GetOffsetLeftOfCharacterIndex(CaretDisplayIndex);
 			if (desiredXPositionOnLine == DesiredXPositionOnLine.Set)
 			{
 				desiredBarX = InsertBarPosition.X;
@@ -920,7 +928,7 @@ namespace MatterHackers.Agg.UI
                 return;
             }
 
-            text = NormalizeLineEndings(text);
+            text = TextLineEndings.Normalize(text);
             start = Math.Max(0, Math.Min(start, actualText.Length));
             int end = Math.Max(start, Math.Min(start + Math.Max(0, length), actualText.Length));
             string replaced = actualText.Substring(0, start) + text + actualText.Substring(end);
@@ -1058,7 +1066,7 @@ namespace MatterHackers.Agg.UI
 						}
 						else if (MacCommandRequested(keyEvent))
 						{
-							CharIndexToInsertBefore = GotoStartOfCurrentLine(internalTextWidget.Text, CharIndexToInsertBefore);
+							SetCaretFromDisplay(GotoStartOfCurrentLine(internalTextWidget.Text, CaretDisplayIndex));
 						}
 						else if (CharIndexToInsertBefore > 0)
 						{
@@ -1215,7 +1223,7 @@ namespace MatterHackers.Agg.UI
 						}
 						else
 						{
-							CharIndexToInsertBefore = GotoStartOfCurrentLine(internalTextWidget.Text, CharIndexToInsertBefore);
+							SetCaretFromDisplay(GotoStartOfCurrentLine(internalTextWidget.Text, CaretDisplayIndex));
 						}
 
 						keyEvent.SuppressKeyPress = true;
@@ -1235,7 +1243,7 @@ namespace MatterHackers.Agg.UI
 							}
 							else if (MacCommandRequested(keyEvent))
 							{
-								SelectionIndexToStartBefore = GotoStartOfCurrentLine(internalTextWidget.Text, CharIndexToInsertBefore);
+								SelectionIndexToStartBefore = wrapLayout.ToActual(GotoStartOfCurrentLine(internalTextWidget.Text, CaretDisplayIndex));
 							}
 							else
 							{
@@ -1460,12 +1468,12 @@ namespace MatterHackers.Agg.UI
                 }
 				else
 				{
-					stringOnClipboard = NormalizeLineEndings(stringOnClipboard);
+					stringOnClipboard = TextLineEndings.Normalize(stringOnClipboard);
 				}
 
                 stringBuilder.Insert(CharIndexToInsertBefore, stringOnClipboard);
                 CharIndexToInsertBefore += stringOnClipboard.Length;
-                actualText = NormalizeLineEndings(stringBuilder.ToString());
+                actualText = TextLineEndings.Normalize(stringBuilder.ToString());
                 UpdateDisplayText();
 
                 undoHistory.RecordEdit();
@@ -1559,20 +1567,20 @@ namespace MatterHackers.Agg.UI
 
         private void GotoLineAbove()
 		{
-			TextCaretNavigation.GetLineExtents(actualText, CharIndexToInsertBefore, out int startIndexInclusive, out int endIndexInclusive);
+			TextCaretNavigation.GetLineExtents(LineText, CaretDisplayIndex, out int startIndexInclusive, out int endIndexInclusive);
 
-			TextCaretNavigation.GetLineExtents(actualText, startIndexInclusive - 1, out int prevStartIndexInclusive, out int prevEndIndexInclusive);
+			TextCaretNavigation.GetLineExtents(LineText, startIndexInclusive - 1, out int prevStartIndexInclusive, out int prevEndIndexInclusive);
 			// we found the extents of the line above now put the cursor in the right place.
-			CharIndexToInsertBefore = GetIndexOffset(prevStartIndexInclusive, prevEndIndexInclusive, desiredBarX);
+			SetCaretFromDisplay(GetIndexOffset(prevStartIndexInclusive, prevEndIndexInclusive, desiredBarX));
 		}
 
 		private void GotoLineBelow()
 		{
-			TextCaretNavigation.GetLineExtents(actualText, CharIndexToInsertBefore, out int startIndexInclusive, out int endIndexInclusive);
+			TextCaretNavigation.GetLineExtents(LineText, CaretDisplayIndex, out int startIndexInclusive, out int endIndexInclusive);
 
-			TextCaretNavigation.GetLineExtents(actualText, endIndexInclusive + 1, out int nextStartIndexInclusive, out int nextEndIndexInclusive);
+			TextCaretNavigation.GetLineExtents(LineText, endIndexInclusive + 1, out int nextStartIndexInclusive, out int nextEndIndexInclusive);
 			// we found the extents of the line above now put the cursor in the right place.
-			CharIndexToInsertBefore = GetIndexOffset(nextStartIndexInclusive, nextEndIndexInclusive, desiredBarX);
+			SetCaretFromDisplay(GetIndexOffset(nextStartIndexInclusive, nextEndIndexInclusive, desiredBarX));
 		}
 
         public void SelectAll()
@@ -1589,15 +1597,8 @@ namespace MatterHackers.Agg.UI
 
         internal void GotoEndOfCurrentLine()
         {
-            int indexOfReturn = actualText.IndexOf('\n', CharIndexToInsertBefore);
-            if (indexOfReturn == -1)
-            {
-                CharIndexToInsertBefore = actualText.Length;
-            }
-            else
-            {
-                CharIndexToInsertBefore = indexOfReturn;
-            }
+            int indexOfReturn = LineText.IndexOf('\n', CaretDisplayIndex);
+            SetCaretFromDisplay(indexOfReturn == -1 ? LineText.Length : indexOfReturn);
 
             FixBarPosition(DesiredXPositionOnLine.Set);
         }
@@ -1618,7 +1619,7 @@ namespace MatterHackers.Agg.UI
 
 		public void SetTextAsUndoBaseline(string text, int charIndex = 0)
 		{
-			actualText = NormalizeLineEndings(text, charIndex, out int normalizedCharIndex);
+			actualText = TextLineEndings.Normalize(text, charIndex, out int normalizedCharIndex);
 			UpdateDisplayText();
 			OnTextChanged(null);
 			SetCursorPosition(normalizedCharIndex);

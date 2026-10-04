@@ -324,6 +324,13 @@ namespace MatterHackers.Agg.UI
 			set => ActualTextEditWidget.InternalTextEditWidget.SelectAllOnFocus = value;
 		}
 
+		/// <inheritdoc cref="TextEditWidget.WordWrap"/>
+		public bool WordWrap
+		{
+			get => ActualTextEditWidget.WordWrap;
+			set => ActualTextEditWidget.WordWrap = value;
+		}
+
 		public bool ReadOnly
 		{
 			get => ActualTextEditWidget.ReadOnly;

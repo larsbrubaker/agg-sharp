@@ -183,6 +183,7 @@ namespace MatterHackers.Agg.UI
 			set
 			{
 				InternalTextEditWidget.Multiline = value;
+				UpdateWordWrapWidth();
 				if (Multiline == true)
 				{
 					AutoScroll = true;
@@ -194,6 +195,46 @@ namespace MatterHackers.Agg.UI
 					VerticalScrollBar.Show = ScrollBar.ShowState.Never;
 				}
 			}
+		}
+
+		private bool wordWrap;
+
+		/// <summary>
+		/// Wraps a multi-line field's lines at its width instead of scrolling sideways: at spaces, and inside a word
+		/// too long for a line. Display only - <see cref="Text"/> is exactly what was typed. Off by default.
+		/// </summary>
+		public bool WordWrap
+		{
+			get => wordWrap;
+			set
+			{
+				if (wordWrap != value)
+				{
+					wordWrap = value;
+					UpdateWordWrapWidth();
+					TopLeftOffset = new Vector2(0, TopLeftOffset.Y);
+				}
+			}
+		}
+
+		/// <summary>
+		/// Wraps at the field's width less room for the vertical scroll bar, reserved whether or not the bar is
+		/// showing - a bar appearing would otherwise narrow the lines, re-wrap them and possibly hide itself again.
+		/// </summary>
+		private void UpdateWordWrapWidth()
+		{
+			if (InternalTextEditWidget != null)
+			{
+				InternalTextEditWidget.WordWrapWidth = wordWrap && Multiline
+					? Math.Max(1, Width - ScrollBar.ScrollBarWidth - 4)
+					: 0;
+			}
+		}
+
+		public override void OnBoundsChanged(EventArgs e)
+		{
+			UpdateWordWrapWidth();
+			base.OnBoundsChanged(e);
 		}
 
 		public int SelectionIndexToStartBefore
